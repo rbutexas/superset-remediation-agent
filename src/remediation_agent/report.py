@@ -299,82 +299,10 @@ def render_text(report: Report) -> str:
 
 
 def render_html(report: Report) -> str:
-    def esc(value: Any) -> str:
-        return html.escape(str(value))
-
-    rows = "\n".join(
-        f"<tr><td><code>{esc(f.key)}</code></td>"
-        f"<td>{esc(f.title[:80])}</td>"
-        f"<td>{'<a href=' + chr(34) + esc(f.issue_url) + chr(34) + '>#' + str(f.issue_number) + '</a>' if f.issue_url else '—'}</td>"
-        f"<td class='s-{esc(f.status).replace(' ', '-')}'>{esc(f.status)}</td>"
-        f"<td>{_duration(f.time_to_verdict)}</td>"
-        f"<td>{''.join('<a href=' + chr(34) + esc(p) + chr(34) + '>PR</a> ' for p in f.prs) or '—'}</td>"
-        f"</tr>"
-        for f in sorted(report.findings, key=lambda r: r.key)
-    )
-
-    mix = "\n".join(
-        f"<li><b>{esc(k)}</b> — {v}</li>"
-        for k, v in report.outcome_mix.most_common()
-    )
-
-    agreed, compared = report.heuristic_agreement
-    cost = (f"{report.total_acus:.2f} ACU" if report.acus_are_reliable
-            else "not yet reported (Devin aggregates on a delay)")
-
-    stalled = "".join(
-        f"<li><a href='{esc(s['url'])}'>{esc(s['finding'] or s['session_id'])}</a></li>"
-        for s in report.stalled_sessions
-    ) or "<li>none</li>"
-
-    return f"""<!doctype html>
-<meta charset="utf-8"><title>Remediation pipeline</title>
-<style>
- body{{font:14px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;
-       max-width:1100px;margin:2rem auto;padding:0 1rem;color:#1a1a1a}}
- h1{{font-size:1.3rem}} h2{{font-size:1rem;margin-top:2rem;color:#555}}
- table{{border-collapse:collapse;width:100%}}
- td,th{{border-bottom:1px solid #e5e5e5;padding:.45rem .6rem;text-align:left;
-        vertical-align:top}}
- th{{font-weight:600;color:#666;font-size:.8rem;text-transform:uppercase}}
- .big{{font-size:2rem;font-weight:600}}
- .k{{display:inline-block;margin-right:2.5rem}}
- .note{{color:#666;font-size:.85rem}}
- [class^=s-]{{font-weight:600}}
- .s-fixed,.s-decline_not_actionable,.s-blocked_upstream{{color:#0a7d33}}
- .s-STALLED,.s-failed_verification{{color:#b00020}}
-</style>
-<h1>Remediation pipeline</h1>
-<p class="note">generated {time.strftime('%Y-%m-%d %H:%M',
-                                         time.localtime(report.generated_at))}</p>
-
-<p>
- <span class="k"><span class="big">{len(report.findings)}</span><br>findings</span>
- <span class="k"><span class="big">{len(report.resolved)}</span><br>resolved</span>
- <span class="k"><span class="big">{len(report.prs)}</span><br>pull requests</span>
- <span class="k"><span class="big">{len(report.stalled_sessions)}</span><br>stalled</span>
-</p>
-
-<h2>Outcome mix</h2>
-<ul>{mix}</ul>
-<p class="note">A dismissal with evidence resolves a finding just as a pull
-request does. Counting only fixes would reward changing code that should have
-been left alone.</p>
-
-<h2>Cost</h2><p>{esc(cost)}</p>
-
-<h2>Findings</h2>
-<table><tr><th>key</th><th>title</th><th>issue</th><th>status</th>
-<th>time to verdict</th><th>output</th></tr>
-{rows}
-</table>
-
-<h2>Stalled — blocked on a person</h2><ul>{stalled}</ul>
-
-<h2>Heuristic vs agent</h2>
-<p>matched on {agreed}/{compared}. Where they differ is where the judgement
-actually happened.</p>
-"""
+    """Delegates to `dashboard.render`. Imported lazily so the text and JSON
+    renderers stay usable if the dashboard module is ever stripped."""
+    from .dashboard import render
+    return render(report)
 
 
 def render_json(report: Report) -> str:
