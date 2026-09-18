@@ -32,7 +32,7 @@ import urllib.request
 from typing import Iterable
 
 from ..models import Evidence, Finding, Severity, TriageDecision
-from .base import npm_metadata, read_json, register
+from .base import NotInRegistry, npm_metadata, read_json, register
 
 log = logging.getLogger(__name__)
 
@@ -98,18 +98,16 @@ class UnresolvableAdvisory:
                 continue
             installed = match.group(1)
 
-            try:
-                vulns = osv_query(name, installed)
-            except Exception as exc:                  # noqa: BLE001
-                log.warning("OSV lookup failed for %s@%s: %s", name, installed, exc)
-                continue
+            # An OSV failure propagates: "no advisories" and "could not check"
+            # must not look the same to the caller.
+            vulns = osv_query(name, installed)
             if not vulns:
                 continue
 
             try:
                 registry_latest = npm_metadata(name)["dist-tags"]["latest"]
-            except Exception as exc:                  # noqa: BLE001
-                log.warning("npm lookup failed for %s: %s", name, exc)
+            except NotInRegistry:
+                log.info("%s is not on npm at all; no downgrade hazard", name)
                 continue
 
             rows, unresolvable, downgrade_risk = [], [], False

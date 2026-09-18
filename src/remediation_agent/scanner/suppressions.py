@@ -21,11 +21,12 @@ from __future__ import annotations
 import logging
 import pathlib
 import re
+import urllib.error
 from dataclasses import dataclass, field
 from typing import Iterable
 
 from ..models import Evidence, Finding, Severity, TriageDecision
-from .base import npm_latest, npm_metadata, npm_published, read_json, register
+from .base import NotInRegistry, npm_latest, npm_published, read_json, register
 
 log = logging.getLogger(__name__)
 
@@ -130,10 +131,15 @@ class SuppressionAudit:
             ref = f"{owner}/{repo}#{number}"
             try:
                 data = self._link_state(kind, owner, repo, number)
-            except Exception as exc:                  # noqa: BLE001
-                log.warning("could not resolve %s: %s", ref, exc)
+            except urllib.error.HTTPError as exc:
+                if exc.code not in (404, 410):
+                    # Rate limit, auth, outage: we did not learn anything. Let it
+                    # propagate so the scan reports itself degraded rather than
+                    # concluding "not stale" from an absence of evidence.
+                    raise
+                log.warning("%s no longer exists (%s)", ref, exc.code)
                 evidence.append(Evidence(f"Referenced {kind} {ref}",
-                                         f"could not be checked ({exc})",
+                                         f"no longer exists (HTTP {exc.code})",
                                          f"github:{ref}"))
                 all_resolved = False
                 continue
@@ -187,9 +193,11 @@ class SuppressionAudit:
 
             try:
                 latest = npm_latest(sup.dependency)
-            except Exception as exc:                  # noqa: BLE001
-                log.warning("npm lookup failed for %s: %s", sup.dependency, exc)
+            except NotInRegistry:
+                log.info("%s is not published to npm; skipping", sup.dependency)
                 continue
+            # Any other failure propagates: the scan reports itself degraded
+            # rather than quietly returning fewer findings.
 
             evidence = [
                 Evidence("Suppressed in dependabot.yml",

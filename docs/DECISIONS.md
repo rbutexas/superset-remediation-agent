@@ -516,3 +516,73 @@ drift from the real schema. Kept minimal on purpose: required keys and enum
 membership only, no attempt at full JSON Schema semantics.
 
 **Where.** `schema.py::validate_minimal`
+
+---
+
+## ★ 27. The router decides whether a verdict is needed — not what it is
+
+`routing.py` classifies each finding as `TRIAGE`, `DIRECT_TO_REMEDIATION`, or
+`HOLD_FOR_HUMAN`, on observable properties: does it carry prohibitions, does it
+carry unresolved questions, how many files are in scope.
+
+**Why.** Decision 18 sends findings to a Devin triage session for a verdict.
+Taken literally that means *every* finding gets a session — which is right for
+ambiguous work and wasteful for everything else. An org processing five hundred
+findings a week would pay for five hundred triage sessions to surface perhaps
+forty non-obvious decisions. Paying an agent to conclude "yes, apply the
+available patch" is overhead, not judgment.
+
+So there are two distinct questions, and only one of them belongs to the agent:
+
+| Question | Answered by |
+|---|---|
+| Is this ambiguous enough to need judgment? | the router — cheap, deterministic, auditable |
+| What does it deserve? | **Devin** |
+
+The router never reaches a `TriageDecision`. A test asserts that the two enums
+share no values, so the distinction cannot quietly erode.
+
+**The policy is deliberately asymmetric.** Ambiguity is the default, and
+`allow_direct_remediation` is off out of the box. Mis-routing an ambiguous
+finding to remediation means an agent changing code it should have questioned.
+Mis-routing an unambiguous one to triage costs a few credits. Those errors are
+not equivalent, so the policy is not either.
+
+**On the current finding set this changes nothing** — all four carry
+prohibitions or open questions and route to triage regardless. That is a
+property of the findings, not a law, and the demo should say so: at volume you
+route the obvious deterministically and reserve the agent for the tail. These
+four *are* the tail. That was the selection criterion.
+
+**Cost.** A policy object that can be misconfigured, and one more concept in the
+pipeline. Mitigated by making every routing decision carry its reasons, so a dry
+run prints exactly why each finding went where it did.
+
+**Where.** `routing.py`, `dispatch.py::plan`, `tests/test_routing.py`
+
+---
+
+## 28. A scan reports whether it could see the truth
+
+`run_detectors` returns a `ScanResult` carrying `ran`, `failed` and `degraded`,
+rather than a bare list.
+
+**Why.** This came from an accident. Running the scanner under an interpreter
+with no CA bundle, two detectors failed their network lookups, logged a warning,
+and returned nothing. The scan "succeeded" with one finding instead of four.
+
+That is the failure mode decision 7 was written to avoid, and decision 7 did not
+actually prevent it — it kept the scan alive but left the failure in the log,
+where a caller cannot act on it. **Zero findings and "we could not look" must not
+be the same value.** Filing issues from a degraded scan would imply the missing
+findings had been resolved.
+
+The same distinction now runs through the helpers: `NotInRegistry` is a fact a
+detector can reason about, while a timeout or TLS failure propagates and degrades
+the scan.
+
+**Cost.** Callers must handle a result object, and `raise_if_degraded()` has to
+be invoked deliberately at the points where acting on a partial picture would be
+wrong. A caller that forgets it gets the old behaviour back.
+
+**Where.** `scanner/base.py::ScanResult`, `NotInRegistry`

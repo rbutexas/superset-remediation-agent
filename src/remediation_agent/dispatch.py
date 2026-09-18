@@ -30,6 +30,7 @@ from .config import CAMPAIGN_TAG, Config
 from .devin import DevinClient
 from .github import GitHubClient
 from .models import Finding, Stage, TriageDecision
+from .routing import DEFAULT_POLICY, Policy, Route, RoutingDecision, route, summarise
 from .playbooks import (
     REMEDIATION_BODY,
     REMEDIATION_TITLE,
@@ -77,10 +78,32 @@ class DispatchResult:
 
 
 class Dispatcher:
-    def __init__(self, cfg: Config, devin: DevinClient, github: GitHubClient) -> None:
+    def __init__(self, cfg: Config, devin: DevinClient, github: GitHubClient,
+                 policy: Policy = DEFAULT_POLICY) -> None:
         self.cfg = cfg
         self.devin = devin
         self.github = github
+        self.policy = policy
+
+    # ---------------------------------------------------------- planning
+
+    def plan(self, findings: list[Finding]) -> dict[str, RoutingDecision]:
+        """Decide which findings need an agent's judgment, and which do not.
+
+        This is the only place a finding's path through the pipeline is chosen,
+        and it chooses on observable properties — never on a guess at the answer.
+        `RoutingDecision.reasons` makes every choice auditable in a dry run.
+
+        With the default policy everything routes to triage, because all the
+        findings this scanner currently produces carry prohibitions or open
+        questions. That is a property of these findings, not a law: enable
+        `Policy.allow_direct_remediation` and unambiguous findings skip triage.
+        The distinction matters at volume, where paying an agent to conclude
+        "yes, apply the available patch" is overhead rather than judgment.
+        """
+        decisions = {f.key: route(f, self.policy) for f in findings}
+        log.info("%s", summarise(decisions))
+        return decisions
 
     # ---------------------------------------------------------- provisioning
 
