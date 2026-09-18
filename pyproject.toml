@@ -1,0 +1,27 @@
+[project]
+name = "remediation-agent"
+version = "0.1.0"
+description = "Event-driven remediation of engineering debt using the Devin API"
+requires-python = ">=3.11"
+
+# Deliberately empty. This tool audits dependency risk; it takes none of its own.
+# Everything below is stdlib: urllib, json, sqlite3, dataclasses, argparse.
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+remediation-agent = "remediation_agent.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["error"]
+addopts = "-q --strict-markers"
