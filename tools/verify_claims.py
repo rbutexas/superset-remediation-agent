@@ -371,8 +371,11 @@ def main() -> int:
         except Exception as exc:  # a broken check must not hide the others
             record("?", f"check raised {type(exc).__name__}", "ERROR", str(exc)[:160])
 
+    n_fail = sum(1 for r in RESULTS if r["status"] in ("FAIL", "ERROR"))
+
     if args.json:
         print(json.dumps(RESULTS, indent=2))
+        return 1 if n_fail else 0
     else:
         current = None
         for r in RESULTS:
@@ -388,7 +391,6 @@ def main() -> int:
             elif r["status"] == "INFO":
                 print(f"           {r['actual']}")
 
-    n_fail = sum(1 for r in RESULTS if r["status"] in ("FAIL", "ERROR"))
     n_pass = sum(1 for r in RESULTS if r["status"] == "PASS")
     print(f"\n{'=' * 78}")
     print(f"{n_pass} passed, {n_fail} failed/errored, "
