@@ -1,7 +1,20 @@
+# Credentials — never commit. The example file is the exception.
 .env
 .env.*
 *.env
 .devin.env
+!.env.example
+
+# Local state
+data/
+work/
+*.db
+*.db-wal
+*.db-shm
+
+# Python
 __pycache__/
+*.py[cod]
 .venv/
-fixtures/live/
+*.egg-info/
+.pytest_cache/

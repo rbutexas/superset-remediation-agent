@@ -586,3 +586,27 @@ be invoked deliberately at the points where acting on a partial picture would be
 wrong. A caller that forgets it gets the old behaviour back.
 
 **Where.** `scanner/base.py::ScanResult`, `NotInRegistry`
+
+---
+
+## 29. An empty upstream response is the one failure a scan cannot detect
+
+`ScanResult.degraded` (decision 28) catches a detector that *errored*. It cannot
+catch an upstream API that returns a successful, empty response.
+
+Observed once: three consecutive container runs reported four findings, and a
+fourth reported three. The OSV query for `xlsx` had returned `{"vulns": []}` —
+HTTP 200, no error, nothing to degrade on. The scan was confidently wrong.
+
+**Why it is not fixed properly.** Distinguishing "no advisories" from "the
+advisory service hiccuped" needs either a known-good baseline to compare against
+or a second source to cross-check, and both add a dependency and a maintenance
+burden for a rare transient. The mitigation is a `WARNING` when a
+non-registry-pinned package returns no advisories at all, since that combination
+is unusual enough to deserve a human glance.
+
+**Cost.** A real gap, honestly labelled rather than closed. Anything acting on a
+scan result — filing issues, closing them — should treat a finding that
+*disappeared* since the last run with more suspicion than one that appeared.
+
+**Where.** `scanner/advisories.py`

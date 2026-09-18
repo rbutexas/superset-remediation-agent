@@ -1,0 +1,30 @@
+# Secrets arrive from the environment, never from a build arg or a baked file.
+# `env_file` points at the same ~/.devin.env used locally, so there is one place
+# credentials live and it is outside the repository.
+
+services:
+  agent:
+    build: .
+    image: remediation-agent:local
+    env_file:
+      - ${DEVIN_ENV_FILE:-~/.devin.env}
+    environment:
+      TARGET_REPO: ${TARGET_REPO:-rbutexas/superset}
+      DB_PATH: /app/data/agent.db
+      MAX_ACU_PER_SESSION: ${MAX_ACU_PER_SESSION:-25}
+      MAX_CONCURRENT_SESSIONS: ${MAX_CONCURRENT_SESSIONS:-3}
+    volumes:
+      - ./data:/app/data          # the store survives the container
+      - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro
+    # Read-only mount of the audited checkout: a scanner has no business
+    # writing to the repository it is scanning.
+    command: ["--help"]
+
+  # One-shot helper so a first run needs no local git or Python.
+  #   docker compose run --rm checkout
+  checkout:
+    image: alpine/git:latest
+    volumes:
+      - ${SUPERSET_CHECKOUT:-./work/superset}:/superset
+    command: >
+      clone --depth 1 https://github.com/apache/superset.git /superset

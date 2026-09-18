@@ -102,6 +102,14 @@ class UnresolvableAdvisory:
             # must not look the same to the caller.
             vulns = osv_query(name, installed)
             if not vulns:
+                # An empty result is indistinguishable from a transient upstream
+                # hiccup, and it is the one failure this scan cannot detect: the
+                # request succeeded, so nothing degrades. Observed once against
+                # OSV. Logged at WARNING because a non-registry pin returning no
+                # advisories at all is unusual enough to be worth a human glance.
+                log.warning("OSV returned no advisories for %s@%s — unexpected for "
+                            "a non-registry pin; re-run if this is surprising",
+                            name, installed)
                 continue
 
             try:
