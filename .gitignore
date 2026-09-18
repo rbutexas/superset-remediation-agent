@@ -1,0 +1,7 @@
+.env
+.env.*
+*.env
+.devin.env
+__pycache__/
+.venv/
+fixtures/live/
