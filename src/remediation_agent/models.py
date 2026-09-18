@@ -222,16 +222,41 @@ class SessionRecord:
     updated_at: int = 0
 
     @property
+    def has_output(self) -> bool:
+        return bool(self.structured_output)
+
+    @property
     def is_terminal(self) -> bool:
+        """Has this session finished the work we asked for?
+
+        Note the `waiting_for_user` case. Observed on a real session: the agent
+        emitted its structured output, ended its turn, and moved to
+        `waiting_for_user` — it never reports `finished`. Treating that as a
+        stall would mean waiting forever for a session that had already
+        answered. **Structured output is the completion signal; the status field
+        is not.**
+        """
         if self.status in ("exit", "error"):
             return True
-        return self.status == "running" and self.status_detail == "finished"
+        if self.status == "running" and self.status_detail == "finished":
+            return True
+        return self.needs_human and self.has_output
 
     @property
     def needs_human(self) -> bool:
-        """The silent stall: running, billing, and waiting on a person who has not
-        been told. Instrumented because it is how agent rollouts quietly fail."""
         return self.status_detail in ("waiting_for_user", "waiting_for_approval")
+
+    @property
+    def is_stalled(self) -> bool:
+        """Waiting on a person, with nothing to show for it.
+
+        The distinction from `is_terminal` matters: a session that answered and
+        then idled is done, while one that stopped to ask a question is blocked,
+        billing, and nobody has been told. Only the second is a problem, and
+        conflating them means either chasing sessions that finished or missing
+        ones that are stuck.
+        """
+        return self.needs_human and not self.has_output
 
     def to_row(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)

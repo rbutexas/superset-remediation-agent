@@ -22,7 +22,7 @@ from typing import Any, Iterator
 
 from .config import Config
 from .http import Http
-from .models import SessionRecord, Verdict
+from .models import RemediationOutcome, SessionRecord, Stage, TriageDecision
 
 log = logging.getLogger(__name__)
 
@@ -202,25 +202,46 @@ def to_record(payload: dict[str, Any]) -> SessionRecord:
     """
     tags = payload.get("tags") or []
 
-    finding_key = next(
-        (t.split("finding:", 1)[1] for t in tags if t.startswith("finding:")), None
-    )
-    issue_number = next(
-        (int(t.split("issue:", 1)[1]) for t in tags
-         if t.startswith("issue:") and t.split("issue:", 1)[1].isdigit()),
-        None,
-    )
+    def tag_value(prefix: str) -> str | None:
+        return next((t.split(prefix, 1)[1] for t in tags if t.startswith(prefix)), None)
+
+    finding_key = tag_value("finding:")
+
+    raw_issue = tag_value("issue:")
+    issue_number = int(raw_issue) if raw_issue and raw_issue.isdigit() else None
+
+    stage: Stage | None = None
+    raw_stage = tag_value("stage:")
+    if raw_stage:
+        try:
+            stage = Stage(raw_stage)
+        except ValueError:
+            log.warning("session %s has unknown stage tag %r",
+                        payload.get("session_id"), raw_stage)
 
     structured = payload.get("structured_output") or None
-    verdict: Verdict | None = None
-    if structured and isinstance(structured, dict):
-        raw = structured.get("verdict")
-        if isinstance(raw, str):
+    triage_decision: TriageDecision | None = None
+    remediation_outcome: RemediationOutcome | None = None
+
+    if isinstance(structured, dict):
+        # The two stages use different schemas, so read whichever key is present
+        # rather than trusting the stage tag — a mislabelled session should still
+        # yield a usable record.
+        raw_decision = structured.get("decision")
+        if isinstance(raw_decision, str):
             try:
-                verdict = Verdict(raw)
+                triage_decision = TriageDecision(raw_decision)
             except ValueError:
-                log.warning("session %s returned unknown verdict %r",
-                            payload.get("session_id"), raw)
+                log.warning("session %s returned unknown triage decision %r",
+                            payload.get("session_id"), raw_decision)
+
+        raw_outcome = structured.get("outcome")
+        if isinstance(raw_outcome, str):
+            try:
+                remediation_outcome = RemediationOutcome(raw_outcome)
+            except ValueError:
+                log.warning("session %s returned unknown remediation outcome %r",
+                            payload.get("session_id"), raw_outcome)
 
     prs = tuple(
         pr.get("url", "") for pr in (payload.get("pull_requests") or []) if pr.get("url")
@@ -228,6 +249,7 @@ def to_record(payload: dict[str, Any]) -> SessionRecord:
 
     return SessionRecord(
         session_id=payload["session_id"],
+        stage=stage,
         finding_key=finding_key,
         issue_number=issue_number,
         status=payload.get("status", "unknown"),
@@ -235,7 +257,8 @@ def to_record(payload: dict[str, Any]) -> SessionRecord:
         acus=float(payload.get("acus_consumed") or 0.0),
         url=payload.get("url", ""),
         title=payload.get("title"),
-        verdict=verdict,
+        triage_decision=triage_decision,
+        remediation_outcome=remediation_outcome,
         structured_output=structured,
         pull_requests=prs,
         created_at=int(payload.get("created_at") or 0),
