@@ -24,7 +24,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Iterable
 
-from ..models import Disposition, Evidence, Finding, Severity
+from ..models import Evidence, Finding, Severity, TriageDecision
 from .base import npm_latest, npm_metadata, npm_published, read_json, register
 
 log = logging.getLogger(__name__)
@@ -245,7 +245,7 @@ class SuppressionAudit:
                 f"the current blocker."
             ),
             detector=self.name,
-            disposition=Disposition.REMEDIATE,
+            scanner_hint=TriageDecision.REMEDIATE,
             severity=Severity.MEDIUM,
             evidence=tuple(evidence),
             labels=("dependencies", "frontend"),
@@ -259,6 +259,14 @@ class SuppressionAudit:
                 "The original failure demonstrated not to reproduce.",
                 "The suppression block removed from `.github/dependabot.yml`.",
                 "If it still fails: pin retained, comment updated with the real blocker.",
+            ),
+            open_questions=(
+                "Why was the upgrade reverted originally? Find the revert and read it "
+                "before deciding — the stated condition clearing does not tell you "
+                "whether the underlying failure is gone.",
+                "Can the original failure mode actually be verified in a session, or "
+                "does it need a build the agent cannot run? If the latter, say so.",
+                "Does the new major carry breaking changes that touch the files here?",
             ),
         )
 
@@ -276,7 +284,7 @@ class SuppressionAudit:
                 f"is not waiting on anything external; it is waiting on us."
             ),
             detector=self.name,
-            disposition=Disposition.REMEDIATE,
+            scanner_hint=TriageDecision.REMEDIATE,
             severity=Severity.MEDIUM,
             evidence=tuple(evidence),
             labels=("dependencies", "frontend", "build"),
@@ -285,6 +293,12 @@ class SuppressionAudit:
                 f"`{sup.dependency}` upgraded and `{path}` migrated to the new API.",
                 "Existing tests covering this path pass.",
                 "The suppression block removed from `.github/dependabot.yml`.",
+            ),
+            open_questions=(
+                "Is the workaround in the current code still necessary against the new "
+                "version, or did the upgrade remove the defect it compensates for?",
+                "Does existing test coverage actually exercise the path that broke last "
+                "time, or would a green suite be misleading here?",
             ),
         )
 

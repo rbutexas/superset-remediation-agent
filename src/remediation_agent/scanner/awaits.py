@@ -21,7 +21,7 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from ..models import Disposition, Evidence, Finding, Severity
+from ..models import Evidence, Finding, Severity, TriageDecision
 from .base import read_json, register
 
 ACTIONS = (
@@ -154,6 +154,14 @@ class UnawaitedUserEvent:
             "Any changed test expectation called out in the PR description.",
         ]
 
+        open_questions = [
+            "Are all of the high-risk sites genuinely defects, or is any one of them "
+            "deliberately un-awaited? Check before changing it.",
+            "Does awaiting any of them reveal an assertion that was only passing "
+            "because of the race? Those need the expectation rewritten, not an await.",
+            "Can the lint rule be enabled without failing CI, and at what scope?",
+        ]
+
         if plugin_version and not rule_enabled:
             evidence.append(Evidence(
                 "eslint-plugin-testing-library installed but NOT enabled",
@@ -195,13 +203,14 @@ class UnawaitedUserEvent:
                    f"{len(files)} files, and the lint rule that catches them is disabled"),
             summary=summary,
             detector=self.name,
-            disposition=Disposition.REMEDIATE,
+            scanner_hint=TriageDecision.REMEDIATE,
             severity=Severity.HIGH if high else Severity.MEDIUM,
             evidence=tuple(evidence),
             labels=("test-infrastructure", "flaky-tests", "frontend"),
             paths=tuple(high_files),
             acceptance=tuple(acceptance),
             guardrails=tuple(guardrails),
+            open_questions=tuple(open_questions),
         )]
 
 

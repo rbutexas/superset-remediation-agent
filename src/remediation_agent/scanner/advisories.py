@@ -31,7 +31,7 @@ import re
 import urllib.request
 from typing import Iterable
 
-from ..models import Disposition, Evidence, Finding, Severity
+from ..models import Evidence, Finding, Severity, TriageDecision
 from .base import npm_metadata, read_json, register
 
 log = logging.getLogger(__name__)
@@ -185,7 +185,7 @@ class UnresolvableAdvisory:
                        f"upgrade and will recur on every scan"),
                 summary=summary,
                 detector=self.name,
-                disposition=Disposition.TRIAGE,
+                scanner_hint=TriageDecision.DECLINE_NOT_ACTIONABLE,
                 severity=Severity.MEDIUM if downgrade_risk else Severity.LOW,
                 evidence=tuple(evidence),
                 labels=("security", "triage", "false-positive"),
@@ -197,6 +197,12 @@ class UnresolvableAdvisory:
                     "consuming triage attention.",
                     "A guard preventing automated remediation of this package.",
                     "No dependency change.",
+                ),
+                open_questions=(
+                    "Is the installed version genuinely at or above every fix version "
+                    "the advisories name? Verify each one independently.",
+                    "Is there any remediation that improves the position, or is the "
+                    "correct answer to record a determination and move on?",
                 ),
             ))
 

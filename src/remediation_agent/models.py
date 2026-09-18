@@ -1,8 +1,16 @@
 """Core domain types.
 
-The important idea here is `Verdict`. A remediation pipeline that can only
-succeed by changing code will change code it should not touch. Three of these
-five verdicts involve no code change at all, and two of those are successes.
+The central design point is that **the scanner does not decide what a finding
+deserves.** It produces facts. A Devin triage session reads those facts plus the
+repository and decides.
+
+That split is deliberate. The argument this system makes is that scanners produce
+findings and bots produce patches, but nothing produces *verdicts*. If the verdict
+came from an `if` statement in this file, the argument would answer itself.
+
+The scanner still records an opinion — `scanner_hint` — but it is never used for
+routing. It exists so we can measure how often a cheap heuristic disagrees with an
+agent that read the code, which is a more interesting number than either alone.
 """
 
 from __future__ import annotations
@@ -13,8 +21,44 @@ import json
 from typing import Any
 
 
-class Verdict(enum.StrEnum):
-    """What a session concluded. Enforced by the session's output schema."""
+class TriageDecision(enum.StrEnum):
+    """What a Devin triage session concluded a finding deserves.
+
+    Produced by the agent, not by us.
+    """
+
+    REMEDIATE = "remediate"
+    """Real, actionable, worth the change. Proceeds to a remediation session."""
+
+    DECLINE_NOT_ACTIONABLE = "decline_not_actionable"
+    """Investigated; no action is the correct outcome. A resolution, not a failure."""
+
+    BLOCKED_UPSTREAM = "blocked_upstream"
+    """Cannot proceed until a named external thing changes. Must name it."""
+
+    ESCALATE_TO_HUMAN = "escalate_to_human"
+    """Needs a judgement outside the agent's remit. Must say what is needed."""
+
+    @property
+    def resolves_finding(self) -> bool:
+        """True where the finding needs nothing further from a human.
+
+        An hour saved dismissing a false positive is worth the same as an hour
+        saved landing a fix, and it is the scarcer outcome. Counting only
+        REMEDIATE creates an incentive to change code that should not change.
+        """
+        return self in (
+            TriageDecision.DECLINE_NOT_ACTIONABLE,
+            TriageDecision.BLOCKED_UPSTREAM,
+        )
+
+    @property
+    def dispatches_work(self) -> bool:
+        return self is TriageDecision.REMEDIATE
+
+
+class RemediationOutcome(enum.StrEnum):
+    """What a Devin remediation session achieved."""
 
     FIXED = "fixed"
     """Change applied, verification ran and passed, PR opened."""
@@ -22,28 +66,26 @@ class Verdict(enum.StrEnum):
     MITIGATED = "mitigated"
     """Not upgradable; a compensating change was made instead."""
 
-    DECLINED_NOT_ACTIONABLE = "declined_not_actionable"
-    """Investigated; no action is the correct outcome. A success, not a failure."""
+    FAILED_VERIFICATION = "failed_verification"
+    """A change was made but could not be shown correct. Reported, not merged."""
 
-    BLOCKED_UPSTREAM = "blocked_upstream"
-    """Cannot proceed until a named external dependency changes. Names the blocker."""
+    ABANDONED_ON_GUARDRAIL = "abandoned_on_guardrail"
+    """Stopped because proceeding would have violated a stated prohibition.
+    This is a success: the guardrail did its job."""
 
     ESCALATE_TO_HUMAN = "escalate_to_human"
-    """Requires a judgement outside the agent's remit. Names what is needed."""
 
     @property
     def is_success(self) -> bool:
-        """Every verdict except escalation is a resolved outcome.
-
-        An hour saved dismissing a false positive is worth the same as an hour
-        saved landing a fix. Counting only `FIXED` is how automation ends up
-        optimising for a green dashboard.
-        """
-        return self is not Verdict.ESCALATE_TO_HUMAN
+        return self in (
+            RemediationOutcome.FIXED,
+            RemediationOutcome.MITIGATED,
+            RemediationOutcome.ABANDONED_ON_GUARDRAIL,
+        )
 
     @property
-    def changed_code(self) -> bool:
-        return self in (Verdict.FIXED, Verdict.MITIGATED)
+    def produced_code(self) -> bool:
+        return self in (RemediationOutcome.FIXED, RemediationOutcome.MITIGATED)
 
 
 class Severity(enum.StrEnum):
@@ -53,14 +95,12 @@ class Severity(enum.StrEnum):
     INFO = "info"
 
 
-class Disposition(enum.StrEnum):
-    """What the scanner believes this finding needs, before Devin looks at it."""
-
-    REMEDIATE = "remediate"
-    """Expected to require a code change."""
+class Stage(enum.StrEnum):
+    """Which role a session was created for. Same API, different playbook,
+    different output schema, different prompt."""
 
     TRIAGE = "triage"
-    """Expected to require a determination. 'No action' is a valid result."""
+    REMEDIATION = "remediation"
 
     @property
     def trigger_label(self) -> str:
@@ -71,8 +111,9 @@ class Disposition(enum.StrEnum):
 class Evidence:
     """One verifiable statement supporting a finding.
 
-    Every claim a finding makes must arrive as one of these. `source` says where
-    it can be re-checked, so nothing rests on the scanner's assertion alone.
+    `source` says where it can be re-checked, so nothing rests on the scanner's
+    assertion alone. Superset's own AGENTS.md asks automated tools to make
+    findings testable rather than assert them; this is how that is honoured.
     """
 
     claim: str
@@ -85,24 +126,36 @@ class Evidence:
 
 @dataclasses.dataclass(frozen=True, slots=True)
 class Finding:
-    """Something the scanner detected that may warrant work."""
+    """Something the scanner observed. Deliberately carries no decision."""
 
     key: str
-    """Stable identifier. Used to deduplicate across runs, so a weekly scan does
-    not refile the same issue."""
+    """Stable identifier, embedded in the issue body. Deduplicates across runs so
+    a weekly scan updates rather than refiles."""
 
     title: str
     summary: str
     detector: str
-    disposition: Disposition
     severity: Severity
     evidence: tuple[Evidence, ...] = ()
     labels: tuple[str, ...] = ()
     paths: tuple[str, ...] = ()
     acceptance: tuple[str, ...] = ()
+
     guardrails: tuple[str, ...] = ()
-    """Things the agent must NOT do. The xlsx finding is only safe with one of
-    these; without it the obvious remediation is a downgrade."""
+    """Things the agent must not do, rendered into both the issue and the prompt.
+
+    'Resolve this finding' is an under-specified objective, and under-specified
+    objectives get satisfied the cheapest way available. For the xlsx finding the
+    cheapest way is a downgrade. The prohibition has to be data, not a hope about
+    model behaviour."""
+
+    scanner_hint: TriageDecision | None = None
+    """What a cheap heuristic would have guessed. **Never used for routing.**
+    Recorded only so agreement with Devin's triage can be measured."""
+
+    open_questions: tuple[str, ...] = ()
+    """What the scanner could not determine. Passed to triage as the things it
+    specifically needs to resolve."""
 
     def issue_body(self) -> str:
         parts = [self.summary.strip(), ""]
@@ -117,33 +170,43 @@ class Finding:
             parts += list(self.paths)
             parts += ["```", ""]
 
+        if self.open_questions:
+            parts += ["### Open questions for triage", ""]
+            parts += [f"- {q}" for q in self.open_questions]
+            parts += [""]
+
         if self.guardrails:
             parts += ["### Do not", ""]
             parts += [f"- {g}" for g in self.guardrails]
             parts += [""]
 
         if self.acceptance:
-            parts += ["### Acceptance criteria", ""]
+            parts += ["### Acceptance criteria, if this is remediated", ""]
             parts += [f"{i}. {a}" for i, a in enumerate(self.acceptance, 1)]
             parts += [""]
 
         parts += [
             "---",
             f"<!-- finding-key: {self.key} -->",
-            f"_Detected by `{self.detector}`. Re-runnable: "
-            f"`remediation-agent scan --detector {self.detector}`._",
+            f"_Detected by `{self.detector}`. No disposition assigned — triage "
+            f"decides. Re-runnable: `remediation-agent scan --detector {self.detector}`._",
         ]
         return "\n".join(parts)
 
     def all_labels(self) -> list[str]:
-        return sorted({*self.labels, self.disposition.trigger_label})
+        """Everything enters the pipeline as triage. Nothing is pre-judged."""
+        return sorted({*self.labels, Stage.TRIAGE.trigger_label})
 
 
 @dataclasses.dataclass(slots=True)
 class SessionRecord:
-    """Our view of a Devin session. Assembled by polling; Devin does not call back."""
+    """Our view of a Devin session, assembled by polling.
+
+    Devin has no outbound webhook, so this is reconciled rather than pushed.
+    """
 
     session_id: str
+    stage: Stage | None
     finding_key: str | None
     issue_number: int | None
     status: str
@@ -151,7 +214,8 @@ class SessionRecord:
     acus: float
     url: str
     title: str | None = None
-    verdict: Verdict | None = None
+    triage_decision: TriageDecision | None = None
+    remediation_outcome: RemediationOutcome | None = None
     structured_output: dict[str, Any] | None = None
     pull_requests: tuple[str, ...] = ()
     created_at: int = 0
@@ -165,13 +229,17 @@ class SessionRecord:
 
     @property
     def needs_human(self) -> bool:
-        """The silent stall: running, billing, and waiting on a person who has
-        not been told. This is the failure mode nobody instruments."""
+        """The silent stall: running, billing, and waiting on a person who has not
+        been told. Instrumented because it is how agent rollouts quietly fail."""
         return self.status_detail in ("waiting_for_user", "waiting_for_approval")
 
     def to_row(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)
-        d["verdict"] = self.verdict.value if self.verdict else None
+        d["stage"] = self.stage.value if self.stage else None
+        d["triage_decision"] = self.triage_decision.value if self.triage_decision else None
+        d["remediation_outcome"] = (
+            self.remediation_outcome.value if self.remediation_outcome else None
+        )
         d["pull_requests"] = json.dumps(list(self.pull_requests))
         d["structured_output"] = (
             json.dumps(self.structured_output) if self.structured_output else None
