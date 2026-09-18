@@ -3,15 +3,26 @@
 Each entry: the decision, why, and what it costs. A decision with no stated cost
 is a boast rather than a decision.
 
-`★` marks the four worth saying out loud in a demo. The rest are here because a
+`★` marks the ones worth saying out loud in a demo. The rest are here because a
 senior reviewer may ask, and "I hadn't thought about it" is the wrong answer.
+
+This log is append-only. Where a later decision supersedes an earlier one, the
+earlier entry is annotated rather than rewritten — the reasoning that turned out
+to be incomplete is part of the record.
+
+**Start at decision 18.** It is the most important one and it came last.
 
 ---
 
 ## ★ 1. A refusal is a successful outcome
 
-`Verdict.DECLINED_NOT_ACTIONABLE` and `Verdict.BLOCKED_UPSTREAM` both report
-`is_success = True`. Only `ESCALATE_TO_HUMAN` counts as unresolved.
+> **Amended by [18](#-18-the-scanner-does-not-decide--devin-does).** The single
+> `Verdict` enum described below was split into `TriageDecision` and
+> `RemediationOutcome` when the pipeline became two-stage. The principle is
+> unchanged; the type names are not.
+
+`TriageDecision.DECLINE_NOT_ACTIONABLE` and `BLOCKED_UPSTREAM` both report
+`resolves_finding = True`. Only `ESCALATE_TO_HUMAN` counts as unresolved.
 
 **Why.** An engineer-hour saved dismissing a false positive is worth exactly as
 much as an hour saved landing a fix, and it is the scarcer outcome — no existing
@@ -23,7 +34,7 @@ makes the scanner green also reintroduces a vulnerability.
 to carry an outcome *mix* rather than a single figure, which is harder to put on
 a slide and harder to compare across teams.
 
-**Where.** `models.py::Verdict`
+**Where.** `models.py::TriageDecision`, `models.py::RemediationOutcome`
 
 ---
 
@@ -306,3 +317,202 @@ the first run failed on an assertion string that did not match the real text.
 That is the mechanism working.
 
 **Where.** `tools/verify_claims.py`
+
+---
+
+# Added in the two-stage restructure
+
+These came out of re-reading the brief: *"leverage Devin as a core primitive, not
+just a helper tool."* The original design failed that test, and decisions 18–24
+are the response.
+
+---
+
+## ★ 18. The scanner does not decide — Devin does
+
+The scanner emits facts, evidence and open questions. It assigns no disposition.
+A Devin **triage session** reads the finding plus the repository and decides:
+`remediate`, `decline_not_actionable`, `blocked_upstream`, or
+`escalate_to_human`.
+
+**Why.** The original design had the scanner set the disposition and Devin
+execute it. That is a capable helper being handed a decided task — and it
+quietly refutes the argument the whole system makes. The pitch is *"scanners
+produce findings, bots produce patches, nothing produces verdicts."* If the
+verdict came from an `if` statement in `models.py`, the pitch answers itself.
+
+It also makes the refusals real. Previously "Devin declined the xlsx finding"
+would have meant the scanner labelled it triage and Devin agreed. Now Devin sees
+a finding with no disposition attached and independently concludes that no action
+is correct.
+
+**Cost.** Roughly double the sessions — a triage session plus a remediation
+session per finding — and a slower path to the first pull request. Triage should
+be cheap because it reads and reasons without changing code, but that is an
+assumption until measured. It also introduces a real failure mode: **Devin can
+triage wrong.** It could decide to "fix" the xlsx finding. The guardrails exist
+to make that unlikely, not impossible.
+
+**Where.** `models.py` module docstring, `dispatch.py`, `schema.py::TRIAGE_SCHEMA`
+
+---
+
+## ★ 19. Promotion happens by label, not by an internal call
+
+When triage returns `remediate`, the dispatcher adds the `agent:remediate` label
+to the issue. A second automation fires on that label.
+
+**Why.** Two reasons. The decision becomes **visible on the issue timeline** — a
+reviewer can watch triage conclude, see the label appear, and see the remediation
+session start, without reading our logs. And the second stage is driven by the
+same event mechanism as the first, rather than by a private code path that
+behaves differently.
+
+The alternative — calling `create_session` directly from the collector — is
+fewer moving parts but makes the interesting moment invisible.
+
+**Cost.** A round trip through GitHub adds latency, and it means the remediation
+automation must exist and be enabled for the pipeline to complete. A
+misconfigured automation fails silently as "nothing happened" rather than loudly.
+
+**Where.** `dispatch.py::act_on_triage`
+
+---
+
+## 20. The scanner's guess is recorded and never read
+
+`Finding.scanner_hint` holds what a cheap heuristic would have concluded. Nothing
+in the dispatch path reads it.
+
+**Why.** Deleting it would lose a genuinely interesting measurement: how often a
+regex-and-version-comparison heuristic disagrees with an agent that read the
+code. Agreement is evidence the agent is calibrated; disagreement is where the
+judgment is actually happening. Either way it is a better number than the
+outcome mix alone.
+
+Keeping it while never reading it is a deliberate discipline — the field is
+documented as non-routing in three places so a future change does not quietly
+start using it.
+
+**Cost.** A field that looks unused and invites someone to wire it up.
+
+**Where.** `models.py::Finding.scanner_hint`
+
+---
+
+## 21. The output schema invites the agent to contradict us
+
+`TRIAGE_SCHEMA` has a `contradicted_evidence` array: *"Populate this if the
+scanner got something wrong — that is useful, not impolite."*
+
+**Why.** The scanner will be wrong sometimes. During development several of this
+project's own claims were overstated, and one was materially wrong. A pipeline
+where the agent can only agree or escalate has no channel for "your premise is
+incorrect", so that information is lost precisely when it matters most.
+
+It also improves the issues over time: a contradiction is a detector bug report
+arriving through the pipeline.
+
+**Cost.** Nothing structural. The risk is the opposite one — an agent that
+contradicts the scanner incorrectly and talks itself out of real work. Mitigated
+by requiring `evidence_checked` alongside it, so a contradiction has to cite what
+was actually inspected.
+
+**Where.** `schema.py::TRIAGE_SCHEMA`
+
+---
+
+## 22. Two playbooks, because they have different success conditions
+
+Triage and remediation get separate playbooks, separate prompts, separate schemas.
+
+**Why.** Triage succeeds by reaching a defensible decision, *including doing
+nothing*. Remediation succeeds by making a change the project's own tests accept,
+or by stopping when a guardrail says it should. A single playbook covering both
+would have to hedge, and hedged instructions produce hedged behaviour.
+
+Concretely: the triage playbook says "you are not fixing anything in this
+session" and the remediation playbook says "a change you cannot demonstrate is
+correct is not finished." Neither sentence belongs in the other.
+
+**Cost.** Two artefacts to keep aligned, and a prompt change often needs making
+twice.
+
+**Where.** `playbooks.py`
+
+---
+
+## 23. "Stopped because a guardrail said so" is a success
+
+`RemediationOutcome.ABANDONED_ON_GUARDRAIL` reports `is_success = True`, and the
+schema requires naming which prohibition fired and what would have happened
+otherwise.
+
+**Why.** Without this the only ways to end a remediation session are success or
+failure, so an agent facing a guardrail has no honest exit and is pushed toward
+proceeding anyway. Making the stop a first-class positive outcome is what makes
+the prohibition credible rather than decorative.
+
+**Cost.** A verdict that could be over-used as an escape hatch. Requiring the
+specific prohibition to be named makes that visible in review.
+
+**Where.** `models.py::RemediationOutcome`, `schema.py::REMEDIATION_SCHEMA`
+
+---
+
+## 24. An admitted gap beats an unverified claim
+
+`REMEDIATION_SCHEMA.verification` requires `commands_run` (verbatim, not
+described) and carries an `unverifiable` field: *"anything the acceptance
+criteria asked for that you could not verify in this environment."*
+
+**Why.** The `react-checkbox-tree` history is the argument. PR #39261 passed CI
+and still broke every dashboard, because the failure was a runtime error the
+unit tests never touched. An agent that reports "tests pass" without saying what
+the tests did not cover reproduces exactly that failure.
+
+Requiring commands verbatim rather than a summary is the same instinct: "I ran
+the test suite" is unfalsifiable, `pytest ./tests/common ./tests/unit_tests` is
+checkable.
+
+**Cost.** Longer outputs, and an agent can still claim to have run something it
+did not. That is why CI verification is read independently (decision 11) rather
+than trusted from the session.
+
+**Where.** `schema.py::REMEDIATION_SCHEMA`, `playbooks.py::REMEDIATION_BODY`
+
+---
+
+## 25. Filing an issue and spending money are separate actions
+
+`file_findings` creates issues with only the `agent:triage` label. It never
+starts a session. Triggering is always a distinct, explicit step.
+
+**Why.** The two operations have completely different risk profiles — one is
+free and reversible, the other spends a metered budget and gives an agent write
+access to a repository. Collapsing them into one command means a re-run of a
+scan can silently cost money.
+
+**Cost.** One more step in the happy path, and an operator can forget the second
+one. The report shows findings with no session as an explicit state rather than
+omitting them.
+
+**Where.** `dispatch.py::file_findings`
+
+---
+
+## 26. Validate the schema locally as well, despite server-side validation
+
+Devin validates structured output against the schema before a session can finish.
+`schema.py::validate_minimal` checks it again on receipt.
+
+**Why.** Defence in depth at a trust boundary. A partial or malformed payload —
+from an older schema version, a truncated response, a future API change —
+surfaces as a clear validation error naming the field, rather than a `KeyError`
+three layers into the reporter.
+
+**Cost.** ~40 lines duplicating logic the platform already performs, and it can
+drift from the real schema. Kept minimal on purpose: required keys and enum
+membership only, no attempt at full JSON Schema semantics.
+
+**Where.** `schema.py::validate_minimal`
