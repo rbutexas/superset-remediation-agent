@@ -89,6 +89,10 @@ class Report:
     sessions_complete: int
     stalled_sessions: list[dict[str, Any]]
     acus_are_reliable: bool
+    active_sessions: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+    """Sessions in flight right now. Only meaningful while the collector is
+    running, which is why the live view exists at all — a static render of this
+    is always empty by the time anyone reads it."""
 
     # ------------------------------------------------------------ derived
 
@@ -170,6 +174,7 @@ def build(store: Store) -> Report:
             unverifiable=unverifiable,
         ))
 
+    active_sessions: list[dict[str, Any]] = []
     for session in store.sessions():
         if _is_stalled(session):
             stalled_sessions.append({
@@ -177,6 +182,17 @@ def build(store: Store) -> Report:
                 "url": session["url"],
                 "finding": session["finding_key"],
                 "waiting_since": session["last_seen"],
+            })
+        elif session["completed_at"] is None:
+            active_sessions.append({
+                "session_id": session["session_id"],
+                "url": session["url"],
+                "finding": session["finding_key"],
+                "stage": session["stage"],
+                "status": session["status"],
+                "detail": session["status_detail"],
+                "acus": float(session["acus"] or 0),
+                "started": session["first_seen"],
             })
 
     counts = store.counts()
@@ -189,6 +205,7 @@ def build(store: Store) -> Report:
         sessions=counts["sessions"],
         sessions_complete=counts["sessions_complete"],
         stalled_sessions=stalled_sessions,
+        active_sessions=active_sessions,
         # Devin's consumption endpoints aggregate on a delay; a zero here means
         # "not reported yet", not "free". Saying so is better than printing a
         # confident nought.

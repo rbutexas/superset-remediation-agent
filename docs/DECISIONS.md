@@ -610,3 +610,40 @@ scan result — filing issues, closing them — should treat a finding that
 *disappeared* since the last run with more suspicion than one that appeared.
 
 **Where.** `scanner/advisories.py`
+
+---
+
+## ★ 30. The dashboard is served, not written
+
+`remediation-agent serve` runs an HTTP server on localhost with the collector on
+a background thread. The page polls a fragment endpoint every few seconds and
+swaps the body content.
+
+**Why.** A written file is stale the moment it lands. The requirement is "status
+of active and completed tasks", and the active half only exists while something
+is running — by the time anyone opens a saved render, every session in it has
+finished. Watching a session move from `working` to a verdict, and an issue close
+itself, is the system's actual behaviour; a snapshot is a description of it.
+
+Three details follow from that being watched live rather than read:
+
+- **The fragment is swapped, not the page reloaded.** A reload flashes and loses
+  scroll position, which is precisely wrong while screen-sharing.
+- **The live and static renders share one code path**, and a test asserts the
+  fragment is a literal substring of the full page. If they diverged, what is on
+  screen during a demo would not be what the saved artefact shows.
+- **The server holds no state.** It opens a fresh store connection per request,
+  so a refresh, a restart, or three viewers all see the same thing, and the
+  pipeline advances whether or not anyone is looking.
+
+**Bound to 127.0.0.1, and not configurable wider from the CLI.** The page shows
+issue titles, finding detail and session URLs for a private repository, with no
+authentication. It is a local view, not a service.
+
+**Cost.** A second long-running process to explain and to keep alive during a
+demo, and `--no-collect` exists because serving a static view of the store is
+sometimes what you actually want. The polling interval is a tradeoff nobody will
+get right for every audience: fast enough to feel live, slow enough not to
+hammer the API.
+
+**Where.** `serve.py`, `dashboard.py::render(live=True)`, `cli.py::cmd_serve`

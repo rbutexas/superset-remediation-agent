@@ -10,7 +10,8 @@ cost money, so each escalation in consequence is a separate, explicit verb.
     file        create or update the issues                    (writes to GitHub)
     dispatch    start sessions for filed findings                     (SPENDS)
     collect     poll, record, and advance triage into remediation       (free)
-    report      render the dashboard                                    (free)
+    report      render the dashboard to stdout or a file                (free)
+    serve       live dashboard on localhost, updating as sessions run    (free)
     status      one-line health check                                   (free)
 
 `--dry-run` works on every verb that would otherwise create something.
@@ -211,6 +212,25 @@ def cmd_report(args, cfg: Config) -> int:
     return 0
 
 
+def cmd_serve(args, cfg: Config) -> int:
+    """Live dashboard. Reads are unmetered, so watching costs nothing."""
+    from .serve import serve
+
+    collector = None
+    if not args.no_collect:
+        findings = _load_findings(pathlib.Path(args.repo_path))
+        devin, github = DevinClient(cfg), GitHubClient(cfg)
+        dispatcher = Dispatcher(cfg, devin, github, _policy(args))
+        # The store connection is opened per request inside serve(); the
+        # collector gets its own, because SQLite connections are not
+        # shareable across threads.
+        collector = Collector(cfg, devin, Store(cfg.db_path), dispatcher, findings)
+
+    serve(cfg, host=args.host, port=args.port, collector=collector,
+          refresh_seconds=args.refresh)
+    return 0
+
+
 def cmd_status(args, cfg: Config) -> int:
     devin = DevinClient(cfg)
     who = devin.whoami()
@@ -288,6 +308,17 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--format", choices=("text", "html", "json"), default="text")
     s.add_argument("--out")
     s.set_defaults(func=cmd_report)
+
+    s = sub.add_parser("serve", help="live dashboard on localhost")
+    repo_arg(s)
+    s.add_argument("--port", type=int, default=8765)
+    s.add_argument("--host", default="127.0.0.1",
+                   help="deliberately localhost: the page has no authentication")
+    s.add_argument("--refresh", type=int, default=5,
+                   help="browser poll interval in seconds")
+    s.add_argument("--no-collect", action="store_true",
+                   help="serve a static view without advancing the pipeline")
+    s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser("status", help="one-line health check")
     s.set_defaults(func=cmd_status)

@@ -201,6 +201,34 @@ def _stalled_panel(report: Report) -> str:
     )
 
 
+def _active_panel(report: Report) -> str:
+    """Sessions running right now.
+
+    This is the section that justifies serving the dashboard rather than writing
+    it to a file: by the time a static render is read, everything in here has
+    already finished.
+    """
+    if not report.active_sessions:
+        return ('<p class="empty">Nothing in flight. '
+                'The pipeline is idle.</p>')
+
+    rows = []
+    for s_ in sorted(report.active_sessions, key=lambda x: x["started"]):
+        elapsed = _duration(report.generated_at - s_["started"])
+        stage = (s_["stage"] or "session").capitalize()
+        detail = s_["detail"] or s_["status"]
+        working = detail == "working"
+        rows.append(
+            f'<li class="live-row">'
+            f'<span class="pulse{"" if working else " idle"}"></span>'
+            f'<div class="live-main">'
+            f'<a href="{esc(s_["url"])}">{esc(s_["finding"] or s_["session_id"][:16])}</a>'
+            f'<div class="sub">{esc(stage)} · {esc(detail)}</div></div>'
+            f'<div class="live-meta">{elapsed}</div></li>'
+        )
+    return f'<ul class="live">{"".join(rows)}</ul>'
+
+
 def _table(report: Report) -> str:
     rows = []
     for f in sorted(report.findings, key=lambda r: r.key):
@@ -246,7 +274,14 @@ def _cost(report: Report) -> str:
 
 # ------------------------------------------------------------------ document
 
-def render(report: Report) -> str:
+def render(report: Report, *, live: bool = False,
+           refresh_seconds: int = 5) -> str:
+    """`live=True` adds a polling shim and a freshness stamp.
+
+    The shim fetches `/partial` and swaps the body content, rather than
+    reloading. A full reload flashes and loses scroll position, which is exactly
+    wrong for something being screen-shared while sessions progress.
+    """
     agreed, compared = report.heuristic_agreement
     when = time.strftime("%d %b %Y, %H:%M", time.localtime(report.generated_at))
 
@@ -255,6 +290,32 @@ def render(report: Report) -> str:
         f'<p class="note">The cheap heuristic matched the agent on {agreed} of '
         f'{compared}. Where they differ is where the judgement actually happened.</p>'
     ) if compared else '<p class="big-muted">no comparisons yet</p>'
+
+    live_badge = (
+        f'<span class="livedot"><i></i>live · refreshing every {refresh_seconds}s</span>'
+        if live else ""
+    )
+    in_flight = len(report.active_sessions)
+    in_flight_count = f" — {in_flight}" if in_flight else ""
+
+    # Swap the content of .wrap rather than reloading: a full reload flashes and
+    # loses scroll position, which is precisely wrong for something being
+    # screen-shared while sessions progress.
+    shim = f"""<script>
+const REFRESH={refresh_seconds}000;
+async function poll(){{
+  try{{
+    const r=await fetch('/partial',{{cache:'no-store'}});
+    if(r.ok){{
+      const y=window.scrollY;
+      document.querySelector('.wrap').innerHTML=await r.text();
+      window.scrollTo(0,y);
+    }}
+  }}catch(e){{/* server restarting; try again next tick */}}
+  setTimeout(poll,REFRESH);
+}}
+setTimeout(poll,REFRESH);
+</script>""" if live else ""
 
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -368,6 +429,32 @@ a{{color:var(--series-1)}}
 .b-critical{{color:var(--critical)}}
 
 .two{{display:grid;grid-template-columns:1fr 1fr;gap:16px}}
+
+.live{{list-style:none;margin:0;padding:0}}
+.live-row{{display:flex;align-items:center;gap:14px;padding:12px 0;
+  border-bottom:1px solid var(--grid)}}
+.live-row:last-child{{border-bottom:0}}
+.live-main{{flex:1;min-width:0}}
+.live-main a{{font-weight:600;text-decoration:none}}
+.live-meta{{font-variant-numeric:tabular-nums;color:var(--muted);
+  font-size:.84rem;white-space:nowrap}}
+.pulse{{flex:none;width:9px;height:9px;border-radius:50%;
+  background:var(--series-1);box-shadow:0 0 0 0 var(--series-1);
+  animation:pulse 1.8s infinite}}
+.pulse.idle{{background:var(--muted);animation:none}}
+@keyframes pulse{{
+  0%{{box-shadow:0 0 0 0 color-mix(in srgb,var(--series-1) 55%,transparent)}}
+  70%{{box-shadow:0 0 0 7px transparent}}
+  100%{{box-shadow:0 0 0 0 transparent}}
+}}
+@media (prefers-reduced-motion:reduce){{.pulse{{animation:none}}}}
+
+.livedot{{display:inline-flex;align-items:center;gap:7px;font-size:.78rem;
+  color:var(--ink-2);border:1px solid var(--border);border-radius:999px;
+  padding:4px 11px;background:var(--surface)}}
+.livedot i{{width:7px;height:7px;border-radius:50%;background:var(--good);
+  animation:pulse 1.8s infinite;font-style:normal}}
+.hdr{{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}}
 .big{{font-size:2.4rem;font-weight:600;margin:0;letter-spacing:-.02em}}
 .big span{{font-size:1.1rem;color:var(--muted);font-weight:400}}
 .big-muted{{font-size:1.15rem;color:var(--muted);margin:0}}
@@ -380,12 +467,20 @@ a{{color:var(--series-1)}}
 <body>
 <div class="wrap">
 
-<header>
-  <h1>Remediation pipeline</h1>
-  <p class="meta">Apache Superset · <code>rbutexas/superset</code> · {esc(when)}</p>
+<header class="hdr">
+  <div>
+    <h1>Remediation pipeline</h1>
+    <p class="meta">Apache Superset · <code>rbutexas/superset</code> · {esc(when)}</p>
+  </div>
+  {live_badge}
 </header>
 
 <div class="tiles">{_tiles(report)}</div>
+
+<section>
+  <h2>In flight{in_flight_count}</h2>
+  {_active_panel(report)}
+</section>
 
 <section>
   <h2>Outcome mix</h2>
@@ -417,5 +512,17 @@ a{{color:var(--series-1)}}
   trustworthy; hiding them would not.</p>
 </section>
 
-</div></body></html>
+</div>{shim}</body></html>
 """
+
+
+def render_partial(report: Report, *, refresh_seconds: int = 5) -> str:
+    """Just the contents of `.wrap`, for the polling shim to swap in.
+
+    Rendered by the same code path as the full page, so the live view and a
+    saved file can never drift apart.
+    """
+    full = render(report, live=True, refresh_seconds=refresh_seconds)
+    start = full.index('<div class="wrap">') + len('<div class="wrap">')
+    end = full.rindex("</div><script")
+    return full[start:end]
