@@ -12,6 +12,15 @@ says findings that cannot do both should be filed as questions rather than
 vulnerabilities. Making those required fields means a session physically cannot
 report a security finding without meeting that bar.
 
+Both schemas require `issue_number` and `finding_key`. That is not decoration:
+a session started by an automation carries only the automation's static tags —
+`campaign:superset-debt`, `stage:triage` — with nothing identifying which issue
+fired it. Tags are set at automation-creation time and cannot vary per event.
+
+So the agent reports its own context, and the collector reads it back. Without
+this a session runs, answers, and the pipeline has no idea what it answered
+about: no verdict posted, no promotion, no issue closed.
+
 Draft 7, self-contained, no external `$ref` — Devin rejects schemas that are not.
 """
 
@@ -28,8 +37,23 @@ TRIAGE_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "additionalProperties": False,
-    "required": ["decision", "reasoning", "confidence", "evidence_checked"],
+    "required": ["decision", "reasoning", "confidence", "evidence_checked",
+                 "issue_number", "finding_key"],
     "properties": {
+        "issue_number": {
+            "type": "integer",
+            "description": (
+                "The GitHub issue number you are working on. Read it from the "
+                "issue itself."
+            ),
+        },
+        "finding_key": {
+            "type": "string",
+            "description": (
+                "The finding key, taken verbatim from the HTML comment at the "
+                "bottom of the issue body: <!-- finding-key: ... -->"
+            ),
+        },
         "decision": {
             "type": "string",
             "enum": [d.value for d in TriageDecision],
@@ -119,8 +143,23 @@ REMEDIATION_SCHEMA: dict[str, Any] = {
     "$schema": "http://json-schema.org/draft-07/schema#",
     "type": "object",
     "additionalProperties": False,
-    "required": ["outcome", "summary", "verification"],
+    "required": ["outcome", "summary", "verification",
+                 "issue_number", "finding_key"],
     "properties": {
+        "issue_number": {
+            "type": "integer",
+            "description": (
+                "The GitHub issue number you are working on. Read it from the "
+                "issue itself."
+            ),
+        },
+        "finding_key": {
+            "type": "string",
+            "description": (
+                "The finding key, taken verbatim from the HTML comment at the "
+                "bottom of the issue body: <!-- finding-key: ... -->"
+            ),
+        },
         "outcome": {
             "type": "string",
             "enum": [o.value for o in RemediationOutcome],

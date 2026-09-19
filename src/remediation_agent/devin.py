@@ -231,10 +231,22 @@ def to_record(payload: dict[str, Any]) -> SessionRecord:
     def tag_value(prefix: str) -> str | None:
         return next((t.split(prefix, 1)[1] for t in tags if t.startswith(prefix)), None)
 
-    finding_key = tag_value("finding:")
+    structured_early = payload.get("structured_output")
+    reported = structured_early if isinstance(structured_early, dict) else {}
+
+    # Tags are the primary join key for sessions we create ourselves. Sessions
+    # created by an automation cannot carry them — automation tags are fixed at
+    # creation time and cannot vary per event — so those report their own
+    # context in structured output instead. Tags win when both are present.
+    finding_key = tag_value("finding:") or reported.get("finding_key") or None
 
     raw_issue = tag_value("issue:")
-    issue_number = int(raw_issue) if raw_issue and raw_issue.isdigit() else None
+    if raw_issue and raw_issue.isdigit():
+        issue_number = int(raw_issue)
+    else:
+        candidate = reported.get("issue_number")
+        issue_number = int(candidate) if isinstance(candidate, (int, str)) and \
+            str(candidate).isdigit() else None
 
     stage: Stage | None = None
     raw_stage = tag_value("stage:")

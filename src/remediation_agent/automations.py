@@ -146,7 +146,10 @@ def triage_automation_body(cfg: Config, playbook_id: str | None = None, *,
                 "session. `decline_not_actionable` is a valid and valued "
                 "outcome — do not reach for `remediate` because it feels more "
                 "useful.\n\n"
-                "Report your decision via structured output."
+                "Report your decision via structured output. It must include "
+                "the issue number and the `finding-key` from the HTML comment "
+                "at the bottom of the issue body — that is how your answer is "
+                "matched back to the issue."
             ),
             "session": _session(cfg, tags=["stage:triage"]),
         }],
@@ -183,7 +186,10 @@ def remediation_automation_body(cfg: Config, playbook_id: str | None = None, *,
                 "A change you cannot demonstrate is correct is not finished. "
                 "Record the exact verification commands you ran, and say "
                 "plainly what you could not verify.\n\n"
-                "Report the outcome via structured output."
+                "Report the outcome via structured output. It must include the "
+                "issue number and the `finding-key` from the HTML comment at "
+                "the bottom of the issue body — that is how your answer is "
+                "matched back to the issue."
             ),
             "session": _session(cfg, tags=["stage:remediation"]),
         }],
