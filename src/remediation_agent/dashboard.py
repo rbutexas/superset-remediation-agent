@@ -170,11 +170,13 @@ def _verdict_bars(report: Report) -> str:
 
 def _tiles(report: Report) -> str:
     stalled = len(report.stalled_sessions)
+    needs_you = stalled + len(report.abandoned_sessions)
     tiles = [
-        ("Findings", len(report.findings), "detected by the scanner", ""),
-        ("Resolved", len(report.resolved), "reached a verdict", "good"),
-        ("Pull requests", len(report.prs), "opened and verifiable", ""),
-        ("Stalled", stalled, "blocked on a person", "bad" if stalled else ""),
+        ("Found", len(report.findings), "problems detected", ""),
+        ("Answered", len(report.resolved), "reached a decision", "good"),
+        ("Pull requests", len(report.prs), "raised for review", ""),
+        ("Needs you", needs_you, "blocked or unanswered",
+         "bad" if needs_you else ""),
     ]
     return "".join(
         f'<div class="tile {tone}"><div class="tile-n">{value}</div>'
@@ -184,66 +186,85 @@ def _tiles(report: Report) -> str:
     )
 
 
-def _stalled_panel(report: Report) -> str:
+def _attention_panel(report: Report) -> str:
+    """What needs a person. Counted in findings, because that is the unit of
+    work; the session link is only how you go and look."""
     blocks = []
 
     if report.stalled_sessions:
         items = "".join(
-            f'<li><a href="{esc(s["url"])}">{esc(s["finding"] or s["session_id"][:12])}</a>'
-            f' — waiting {_duration(report.generated_at - s["waiting_since"])}</li>'
+            f'<li><b>{esc(s["finding"] or s["session_id"][:12])}</b> — the agent '
+            f'asked a question {_duration(report.generated_at - s["waiting_since"])} '
+            f'ago and is waiting. <a href="{esc(s["url"])}">Answer it</a></li>'
             for s in report.stalled_sessions
         )
         blocks.append(
             '<div class="callout bad"><span class="ico">!</span><div>'
-            f'<b>{len(report.stalled_sessions)} session(s) blocked on a person.</b> '
-            'Each is consuming budget while waiting, and nobody has been told.'
+            f'<b>{len(report.stalled_sessions)} item(s) waiting on a person.</b> '
+            'Work has stopped on these, and nobody has been told.'
             f'<ul>{items}</ul></div></div>'
         )
 
     if report.abandoned_sessions:
         items = "".join(
-            f'<li><a href="{esc(s["url"])}">{esc(s["finding"] or s["session_id"][:12])}</a>'
-            f' — {esc(s["detail"])}</li>'
+            f'<li><b>{esc(s["finding"] or s["session_id"][:12])}</b> — stopped '
+            f'({esc(s["detail"])}) without reaching an answer. '
+            f'<a href="{esc(s["url"])}">See why</a></li>'
             for s in report.abandoned_sessions
         )
         blocks.append(
             '<div class="callout bad"><span class="ico">!</span><div>'
-            f'<b>{len(report.abandoned_sessions)} session(s) ended without '
-            'answering.</b> Out of budget, errored, or idled out after waiting '
-            'too long. These would otherwise be counted as completed.'
+            f'<b>{len(report.abandoned_sessions)} item(s) ended without an answer.</b> '
+            'Out of budget, errored, or left waiting too long. Without this they '
+            'would be counted as finished.'
             f'<ul>{items}</ul></div></div>'
         )
 
     if not blocks:
         return ('<div class="callout ok"><span class="ico">✓</span>'
-                '<div><b>Nothing blocked.</b> No session is waiting on a person '
-                'or has stopped without answering.</div></div>')
+                '<div><b>Nothing needs you.</b> No work item is blocked or has '
+                'stopped without an answer.</div></div>')
     return "".join(blocks)
 
 
-def _active_panel(report: Report) -> str:
-    """Sessions running right now.
+STAGE_WORDS = {
+    "triage": "Being assessed",
+    "remediation": "Being fixed",
+}
 
-    This is the section that justifies serving the dashboard rather than writing
-    it to a file: by the time a static render is read, everything in here has
-    already finished.
+
+def _active_panel(report: Report) -> str:
+    """What is being worked on right now — stated as work, not as sessions.
+
+    A session is the mechanism; the finding is the unit anyone actually cares
+    about. So this reads "Being fixed · 4m", not "remediation session running".
+    The link through to the session is there for whoever wants to watch the
+    agent, but it is not the subject of the sentence.
     """
     if not report.active_sessions:
-        return ('<p class="empty">Nothing in flight. '
-                'The pipeline is idle.</p>')
+        return '<p class="empty">Nothing in progress right now.</p>'
+
+    # Group by finding: one work item may have had several attempts, and a
+    # reader should see the item once.
+    by_finding: dict[str, dict] = {}
+    for s_ in report.active_sessions:
+        key = s_["finding"] or s_["session_id"]
+        prior = by_finding.get(key)
+        if prior is None or s_["started"] < prior["started"]:
+            by_finding[key] = s_
 
     rows = []
-    for s_ in sorted(report.active_sessions, key=lambda x: x["started"]):
+    for key, s_ in sorted(by_finding.items(), key=lambda kv: kv[1]["started"]):
         elapsed = _duration(report.generated_at - s_["started"])
-        stage = (s_["stage"] or "session").capitalize()
-        detail = s_["detail"] or s_["status"]
-        working = detail == "working"
+        doing = STAGE_WORDS.get(s_["stage"] or "", "In progress")
+        working = s_["detail"] == "working"
         rows.append(
             f'<li class="live-row">'
             f'<span class="pulse{"" if working else " idle"}"></span>'
             f'<div class="live-main">'
-            f'<a href="{esc(s_["url"])}">{esc(s_["finding"] or s_["session_id"][:16])}</a>'
-            f'<div class="sub">{esc(stage)} · {esc(detail)}</div></div>'
+            f'<b>{esc(key)}</b>'
+            f'<div class="sub">{esc(doing)}'
+            f' · <a href="{esc(s_["url"])}">watch the agent</a></div></div>'
             f'<div class="live-meta">{elapsed}</div></li>'
         )
     return f'<ul class="live">{"".join(rows)}</ul>'
@@ -498,12 +519,12 @@ a{{color:var(--series-1)}}
 <div class="tiles">{_tiles(report)}</div>
 
 <section>
-  <h2>In flight{in_flight_count}</h2>
+  <h2>In progress{in_flight_count}</h2>
   {_active_panel(report)}
 </section>
 
 <section>
-  <h2>Outcome mix</h2>
+  <h2>What happened to the work</h2>
   {_stacked_bar(report)}
   <p class="lede">Every finding that reached an answer, by the kind of answer.
   A dismissal backed by evidence resolves a finding exactly as a pull request
@@ -512,20 +533,20 @@ a{{color:var(--series-1)}}
   should have been left alone.</p>
 </section>
 
-<section>{_stalled_panel(report)}</section>
+<section>{_attention_panel(report)}</section>
 
 <div class="two">
   <section><h2>Cost</h2>{_cost(report)}</section>
-  <section><h2>Heuristic vs agent</h2>{agreement}</section>
+  <section><h2>Was the agent needed?</h2>{agreement}</section>
 </div>
 
 <section>
-  <h2>Time from detection to verdict</h2>
+  <h2>How long each item took to get an answer</h2>
   {_verdict_bars(report)}
 </section>
 
 <section>
-  <h2>Findings</h2>
+  <h2>Every item</h2>
   {_table(report)}
   <p class="note">“Admitted gap” is where the agent reported something it could
   not verify in its environment. Surfacing those makes the rest of the row

@@ -59,10 +59,16 @@ def test_live_and_partial_come_from_one_renderer(report):
     assert render_partial(report) in render(report, live=True)
 
 
-def test_in_flight_session_is_surfaced(report):
+def test_work_in_progress_is_described_as_work_not_sessions(report):
+    """A VP cares whether the work is moving, not how many agent sessions are
+    running. The panel names the finding and what is being done to it; the
+    session is only a link."""
     html = render(report, live=True)
-    assert "In flight" in html
+
+    assert "In progress" in html
     assert "f:1" in html
+    assert "Being assessed" in html          # not "triage session running"
+    assert "watch the agent" in html
 
 
 def test_refresh_interval_is_honoured(report):
