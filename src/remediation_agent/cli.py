@@ -100,7 +100,9 @@ def cmd_provision(args, cfg: Config) -> int:
         return 0
 
     created = auto.ensure(devin, cfg, dry_run=cfg.dry_run,
-                          enabled=not args.disabled)
+                          enabled=not args.disabled,
+                          triage_playbook=provisioned.triage_playbook_id,
+                          remediation_playbook=provisioned.remediation_playbook_id)
     state = "DISABLED" if args.disabled else "enabled"
     for name, aid in created.items():
         print(f"automation           : {name} -> {aid} [{state}]")
@@ -323,7 +325,8 @@ def cmd_status(args, cfg: Config) -> int:
     print(f"triggers : {'all required present' if not missing else 'MISSING ' + str(missing)}")
 
     live = {a.get("name"): a.get("enabled") for a in devin.list_automations()}
-    for name in (auto.LABEL_AUTOMATION, auto.SCHEDULE_AUTOMATION):
+    for name in (auto.TRIAGE_AUTOMATION, auto.REMEDIATION_AUTOMATION,
+                 auto.SCHEDULE_AUTOMATION):
         state = "enabled" if live.get(name) else ("disabled" if name in live else "absent")
         print(f"           {name}: {state}")
 

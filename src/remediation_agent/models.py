@@ -104,7 +104,25 @@ class Stage(enum.StrEnum):
 
     @property
     def trigger_label(self) -> str:
-        return f"agent:{self.value}"
+        """The GitHub label whose appearance starts this stage.
+
+        Mapped explicitly rather than derived from the enum value. Deriving it
+        gave `agent:remediation` while the label registered on the repository
+        was `agent:remediate` — GitHub creates an unknown label on first use, so
+        the mismatch would not have raised anything; it would have left one
+        uncoloured label in use and another unused, with the automation
+        listening for whichever the enum happened to spell.
+
+        The label is a user-facing name and the enum value is an internal one.
+        They are allowed to differ, but not by accident.
+        """
+        return _TRIGGER_LABELS[self]
+
+
+_TRIGGER_LABELS: dict[Stage, str] = {
+    Stage.TRIAGE: "agent:triage",
+    Stage.REMEDIATION: "agent:remediate",
+}
 
 
 @dataclasses.dataclass(frozen=True, slots=True)

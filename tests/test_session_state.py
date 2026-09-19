@@ -186,3 +186,19 @@ def test_only_answered_sessions_are_torn_down():
 
     assert answered.answered and not answered.is_stalled
     assert stalled.is_stalled and not stalled.answered
+
+
+def test_trigger_labels_match_the_labels_actually_registered():
+    """The label an automation listens for must be the one we create.
+
+    These drifted once: the enum value spelled `agent:remediation` while the
+    repository registered `agent:remediate`. GitHub creates an unknown label
+    silently, so nothing would have failed loudly.
+    """
+    from remediation_agent.dispatch import TRIGGER_LABELS
+
+    for stage in Stage:
+        assert stage.trigger_label in TRIGGER_LABELS, (
+            f"{stage} listens for {stage.trigger_label!r}, which is not a label "
+            f"this tool creates: {sorted(TRIGGER_LABELS)}"
+        )
