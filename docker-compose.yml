@@ -40,6 +40,8 @@ services:
     image: remediation-agent:local
     environment:
       DB_PATH: /app/docs/evidence/run.db
+      # The container binds 0.0.0.0; this is the address that works from here.
+      PUBLIC_URL: http://localhost:${REPLAY_PORT:-8766}
     ports:
       - "127.0.0.1:${REPLAY_PORT:-8766}:8765"
     volumes:
@@ -59,6 +61,7 @@ services:
       DB_PATH: /app/data/agent.db
       MAX_ACU_PER_SESSION: ${MAX_ACU_PER_SESSION:-25}
       MAX_CONCURRENT_SESSIONS: ${MAX_CONCURRENT_SESSIONS:-3}
+      PUBLIC_URL: http://localhost:${DASHBOARD_PORT:-8765}
     ports:
       # Bound to 127.0.0.1 deliberately: the page shows issue detail and session
       # URLs for a private repository and has no authentication.

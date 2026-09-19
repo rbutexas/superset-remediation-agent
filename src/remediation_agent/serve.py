@@ -22,6 +22,7 @@ single-purpose read-only view for one viewer, which is exactly the workload
 from __future__ import annotations
 
 import logging
+import os
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -129,8 +130,14 @@ def serve(cfg: Config, *, host: str = "127.0.0.1", port: int = 8765,
     httpd = ThreadingHTTPServer((host, port), handler)
     httpd.daemon_threads = True
 
-    print(f"\n  dashboard   http://{host}:{port}")
-    print(f"  json        http://{host}:{port}/api/report.json")
+    # Inside a container we bind 0.0.0.0, which is not an address anyone can
+    # open. The compose file knows the host mapping, so it passes it in; print
+    # that instead of the bind address, because the first thing a reader does
+    # with a printed URL is click it.
+    advertised = os.environ.get("PUBLIC_URL") or f"http://{host}:{port}"
+
+    print(f"\n  dashboard   {advertised}")
+    print(f"  json        {advertised}/api/report.json")
     print(f"  refreshing  every {refresh_seconds}s"
           + (f", collector every {cfg.poll_interval_seconds}s" if collector else "")
           + "\n  ctrl-c to stop\n")

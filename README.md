@@ -2,6 +2,23 @@
 
 Event-driven remediation of engineering debt in [Apache Superset](https://github.com/apache/superset), built on the [Devin API](https://docs.devin.ai/api-reference/overview).
 
+### See it in 60 seconds — no account, no credentials
+
+```bash
+docker compose up replay
+```
+
+Then open **<http://localhost:8766>** — the dashboard, showing a recorded run
+against the real repository.
+
+```bash
+docker compose run --rm checkout    # shallow-clone superset, ~440 MB / 16s
+docker compose run --rm scan        # find the issues yourself, live
+```
+
+Neither reads a token. [More on reproducing this](#reproducing-this), including
+what you **cannot** reproduce without your own Devin organisation.
+
 ---
 
 ## The problem
