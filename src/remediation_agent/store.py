@@ -19,6 +19,7 @@ import contextlib
 import json
 import pathlib
 import sqlite3
+import threading
 import time
 from typing import Any, Iterator
 
@@ -83,8 +84,16 @@ class Store:
     def __init__(self, path: pathlib.Path) -> None:
         self.path = path
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        # `serve` runs the collector on a background thread while the HTTP
+        # server answers on others. A connection pinned to its creating thread
+        # raises ProgrammingError on every tick — silently, in a thread nobody
+        # is reading — so the pipeline just quietly stops advancing.
+        # check_same_thread=False lifts the pin; the lock below restores the
+        # safety it was providing. Serialising writes is fine at a handful of
+        # rows per poll, and WAL keeps reads concurrent with them.
+        self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        self._lock = threading.Lock()
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(SCHEMA)
@@ -101,12 +110,13 @@ class Store:
 
     @contextlib.contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
-        try:
-            yield self.conn
-            self.conn.commit()
-        except Exception:
-            self.conn.rollback()
-            raise
+        with self._lock:
+            try:
+                yield self.conn
+                self.conn.commit()
+            except Exception:
+                self.conn.rollback()
+                raise
 
     # ---------------------------------------------------------------- events
 

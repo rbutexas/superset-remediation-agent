@@ -232,6 +232,14 @@ STAGE_WORDS = {
     "remediation": "Being fixed",
 }
 
+# Short forms for the table's Agent column — the transcript link, so the
+# dashboard is one stop: the issue, the live status, and what the agent did.
+STAGE_SHORT = {
+    "triage": "triage",
+    "remediation": "fix",
+    "revalidation": "re-check",
+}
+
 
 def _active_panel(report: Report) -> str:
     """What is being worked on right now — stated as work, not as sessions.
@@ -279,6 +287,11 @@ def _table(report: Report) -> str:
         prs = " ".join(
             f'<a href="{esc(p)}">#{esc(p.rsplit("/", 1)[-1])}</a>' for p in f.prs
         ) or "—"
+        agent = " ".join(
+            f'<a href="{esc(url)}" title="{esc(status)}">'
+            f'{esc(STAGE_SHORT.get(stage, stage))}</a>'
+            for stage, url, status in f.sessions
+        ) or "—"
         gap = (f'<div class="gap"><b>Admitted gap:</b> {esc(f.unverifiable)}</div>'
                if f.unverifiable else "")
         rows.append(
@@ -287,11 +300,12 @@ def _table(report: Report) -> str:
             f"<td>{issue}</td>"
             f'<td><span class="badge b-{role}">{esc(label)}</span></td>'
             f'<td class="num">{_duration(f.time_to_verdict)}</td>'
+            f"<td>{agent}</td>"
             f"<td>{prs}</td></tr>"
         )
     return (
         "<table><thead><tr><th>Finding</th><th>Issue</th><th>Outcome</th>"
-        "<th>Time to verdict</th><th>PR</th></tr></thead>"
+        "<th>Time to verdict</th><th>Agent</th><th>PR</th></tr></thead>"
         f"<tbody>{''.join(rows)}</tbody></table>"
     )
 

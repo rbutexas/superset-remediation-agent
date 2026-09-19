@@ -53,6 +53,9 @@ class FindingRow:
     stalled: bool
     abandoned: bool
     unverifiable: str | None
+    sessions: tuple[tuple[str, str, str], ...] = ()
+    """(stage, url, status) per session, newest last. Surfaced so the dashboard
+    is one place: the issue, the live status, and the agent's own transcript."""
 
     @property
     def resolved(self) -> bool:
@@ -182,6 +185,11 @@ def build(store: Store) -> Report:
             stalled=any(_is_stalled(s) for s in sessions),
             abandoned=any(_is_abandoned(s) for s in sessions),
             unverifiable=unverifiable,
+            sessions=tuple(
+                (s["stage"] or "session", s["url"] or "",
+                 s["status_detail"] or s["status"])
+                for s in sessions if s["url"]
+            ),
         ))
 
     active_sessions: list[dict[str, Any]] = []

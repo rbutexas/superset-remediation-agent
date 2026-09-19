@@ -175,3 +175,50 @@ def test_state_survives_reopening(tmp_path):
             "findings": 1, "issues_filed": 0,
             "sessions": 1, "sessions_complete": 0, "total_acus": 3.0,
         }
+
+
+def test_store_is_usable_from_another_thread(tmp_path):
+    """`serve` runs the collector on a background thread while the HTTP server
+    answers on others. A connection pinned to its creating thread raises on
+    every tick — in a thread nobody is watching — so the pipeline quietly stops
+    advancing while appearing healthy."""
+    import threading
+
+    store = Store(tmp_path / "t.db")
+    errors: list[Exception] = []
+
+    def writer() -> None:
+        try:
+            store.upsert_finding("f:thread", "t", "d", "high")
+            store.record_session(make_session(session_id="from-thread"))
+        except Exception as exc:                      # noqa: BLE001
+            errors.append(exc)
+
+    t = threading.Thread(target=writer)
+    t.start(); t.join()
+
+    assert not errors, f"store unusable off-thread: {errors[0]}"
+    assert store.counts()["findings"] == 1
+    store.close()
+
+
+def test_concurrent_writers_do_not_corrupt(tmp_path):
+    import threading
+
+    store = Store(tmp_path / "t.db")
+    errors: list[Exception] = []
+
+    def writer(n: int) -> None:
+        try:
+            for i in range(10):
+                store.record_session(make_session(session_id=f"s{n}-{i}"))
+        except Exception as exc:                      # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=writer, args=(n,)) for n in range(4)]
+    for t in threads: t.start()
+    for t in threads: t.join()
+
+    assert not errors, errors[:1]
+    assert store.counts()["sessions"] == 40
+    store.close()

@@ -22,6 +22,7 @@ cost money, so each escalation in consequence is a separate, explicit verb.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import logging
 import pathlib
 import sys
@@ -258,6 +259,10 @@ def cmd_serve(args, cfg: Config) -> int:
         # shareable across threads.
         collector = Collector(cfg, devin, Store(cfg.db_path), dispatcher, findings)
 
+    if args.poll:
+        cfg = dataclasses.replace(cfg, poll_interval_seconds=args.poll)
+        if collector is not None:
+            collector.cfg = cfg
     serve(cfg, host=args.host, port=args.port, collector=collector,
           refresh_seconds=args.refresh)
     return 0
@@ -416,6 +421,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="browser poll interval in seconds")
     s.add_argument("--no-collect", action="store_true",
                    help="serve a static view without advancing the pipeline")
+    s.add_argument("--poll", type=int,
+                   help="collector interval in seconds (default 60). Lower it "
+                        "for a demo so the board moves while someone is watching")
     s.set_defaults(func=cmd_serve)
 
     s = sub.add_parser("cleanup", help="terminate finished sessions still open")
