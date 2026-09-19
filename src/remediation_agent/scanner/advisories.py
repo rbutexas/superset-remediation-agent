@@ -163,26 +163,24 @@ class UnresolvableAdvisory:
                 ))
 
             summary = (
-                f"Dependency scanning flags `{name}@{installed}` against "
-                f"{len(unresolvable)} advisor{'y' if len(unresolvable) == 1 else 'ies'} "
-                f"that cannot be cleared by any upgrade. Recording a determination so "
-                f"this is not re-investigated on every scan.\n\n"
+                f"`{name}@{installed}` matches {len(unresolvable)} advisor"
+                f"{'y' if len(unresolvable) == 1 else 'ies'} with no fixed "
+                f"version. No upgrade clears them; the finding will recur on "
+                f"every scan.\n\n"
                 f"{table}\n\n"
-                f"**Why it recurs permanently.** `{name}` is installed from outside the "
-                f"npm registry. With no registry release carrying the fix, the advisory "
-                f"database has no version to record in the `fixed` field, so the "
-                f"machine-readable range stays open at 'all versions'. Scanners read "
-                f"that field; the real fix version appears only in "
-                f"`last_known_affected_version_range`, which they do not parse.\n\n"
+                f"`{name}` is not installed from the npm registry, so the "
+                f"advisory database has no release to record as fixed and the "
+                f"range stays open at all versions. The real fix version "
+                f"appears only in `last_known_affected_version_range`, which "
+                f"scanners do not read.\n\n"
                 + (
-                    f"**The obvious remediation is a downgrade.** The registry's latest "
-                    f"`{name}` is `{registry_latest}` — below the fix version, and below "
-                    f"what is installed today. Any automated remediation that "
-                    f"'reinstalls from the registry' introduces the vulnerability it "
-                    f"claims to resolve.\n\n"
+                    f"Installed: `{installed}`. Registry latest: "
+                    f"`{registry_latest}` — **below the fix**. Switching the "
+                    f"install source to npm would downgrade past both "
+                    f"advisories.\n\n"
                     if downgrade_risk else ""
                 )
-                + "No action by this project can clear the finding."
+                + "Nothing in this repository can clear the finding."
             )
 
             findings.append(Finding(

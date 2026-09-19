@@ -189,7 +189,7 @@ class Finding:
             parts += ["```", ""]
 
         if self.open_questions:
-            parts += ["### Open questions for triage", ""]
+            parts += ["### To determine", ""]
             parts += [f"- {q}" for q in self.open_questions]
             parts += [""]
 
@@ -199,15 +199,15 @@ class Finding:
             parts += [""]
 
         if self.acceptance:
-            parts += ["### Acceptance criteria, if this is remediated", ""]
+            parts += ["### Done when", ""]
             parts += [f"{i}. {a}" for i, a in enumerate(self.acceptance, 1)]
             parts += [""]
 
         parts += [
             "---",
+            f"<sub>filed by <code>{self.detector}</code> · "
+            f"<code>remediation-agent scan --detector {self.detector}</code></sub>",
             f"<!-- finding-key: {self.key} -->",
-            f"_Detected by `{self.detector}`. No disposition assigned — triage "
-            f"decides. Re-runnable: `remediation-agent scan --detector {self.detector}`._",
         ]
         return "\n".join(parts)
 
