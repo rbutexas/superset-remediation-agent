@@ -281,8 +281,13 @@ def to_record(payload: dict[str, Any]) -> SessionRecord:
                 log.warning("session %s returned unknown remediation outcome %r",
                             payload.get("session_id"), raw_outcome)
 
+    # The field is `pr_url`, not `url`. Reading the wrong key here meant every
+    # pull request Devin opened was silently dropped — the dashboard showed a
+    # remediation as fixed with no link to what it produced. `url` is accepted
+    # too, since the shape is not versioned and guessing wrong once was enough.
     prs = tuple(
-        pr.get("url", "") for pr in (payload.get("pull_requests") or []) if pr.get("url")
+        link for pr in (payload.get("pull_requests") or [])
+        if (link := pr.get("pr_url") or pr.get("url"))
     )
 
     return SessionRecord(

@@ -202,3 +202,22 @@ def test_trigger_labels_match_the_labels_actually_registered():
             f"{stage} listens for {stage.trigger_label!r}, which is not a label "
             f"this tool creates: {sorted(TRIGGER_LABELS)}"
         )
+
+
+def test_pull_request_url_is_read_from_the_real_field():
+    """Devin returns `pr_url`, not `url`. Reading the wrong key dropped every
+    pull request silently: the dashboard showed a remediation as fixed with no
+    link to what it produced. Shape taken from a real session payload."""
+    payload = {**REAL_SHAPE,
+               "tags": ["stage:remediation", "finding:f"],
+               "structured_output": {"outcome": "fixed", "summary": "x" * 90},
+               "pull_requests": [{"pr_url": "https://github.com/o/r/pull/3",
+                                  "pr_state": "open"}]}
+
+    assert to_record(payload).pull_requests == ("https://github.com/o/r/pull/3",)
+
+
+def test_legacy_url_key_still_works():
+    payload = {**REAL_SHAPE,
+               "pull_requests": [{"url": "https://github.com/o/r/pull/9"}]}
+    assert to_record(payload).pull_requests == ("https://github.com/o/r/pull/9",)
