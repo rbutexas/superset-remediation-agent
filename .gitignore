@@ -12,6 +12,10 @@ work/
 *.db-wal
 *.db-shm
 
+# ...except the committed evidence snapshot, which is the whole point of
+# docs/evidence: a reviewer with no account can replay a real run.
+!docs/evidence/run.db
+
 # Python
 __pycache__/
 *.py[cod]
