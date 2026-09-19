@@ -87,6 +87,7 @@ class Collector:
                 continue
 
             result.seen += 1
+            self._backfill(record)
             for transition in self.store.record_session(record):
                 result.transitions.append((record.session_id, transition))
                 log.info("%s  %s", record.session_id[:12], transition)
@@ -105,6 +106,47 @@ class Collector:
             self._teardown(record, result)
 
         return result
+
+    # -------------------------------------------------------------- backfill
+
+    def _backfill(self, record: SessionRecord) -> None:
+        """Register a finding the store has not seen, from a session that names it.
+
+        `file` registers findings as it creates their issues, but an issue filed
+        by hand — through the GitHub UI, or by anyone who is not this tool —
+        never goes through that path. Its session would then be recorded against
+        a finding the store knows nothing about, and the dashboard, which builds
+        from findings, would not show it at all.
+
+        So the session's own report of what it worked on is enough to adopt it.
+        That also means the pipeline works for issues this tool did not file,
+        which is the more useful property: a human can file an issue, label it,
+        and the system picks it up.
+        """
+        key = record.finding_key
+        if not key or self.store.finding(key) is not None:
+            return
+
+        finding = self.findings.get(key)
+        if finding is None:
+            log.warning("session %s names finding %r, which no detector produced; "
+                        "recording the session but it will not appear as work",
+                        record.session_id[:12], key)
+            return
+
+        from .routing import route
+        decision = route(finding)
+        self.store.upsert_finding(
+            finding.key, finding.title, finding.detector, finding.severity.value,
+            finding.scanner_hint.value if finding.scanner_hint else None,
+            decision.route.value, list(decision.reasons),
+        )
+        log.info("adopted finding %s from session %s", key, record.session_id[:12])
+
+        if record.issue_number:
+            self.store.attach_issue(
+                key, record.issue_number,
+                f"https://github.com/{self.cfg.repo}/issues/{record.issue_number}")
 
     # -------------------------------------------------------------- teardown
 

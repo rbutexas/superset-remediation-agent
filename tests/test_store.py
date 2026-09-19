@@ -222,3 +222,16 @@ def test_concurrent_writers_do_not_corrupt(tmp_path):
     assert not errors, errors[:1]
     assert store.counts()["sessions"] == 40
     store.close()
+
+
+def test_a_finding_can_be_adopted_from_a_session(store):
+    """An issue filed by hand never passes through `file`, so the store has
+    never heard of its finding. The session's own report is enough to adopt it —
+    otherwise the dashboard, which builds from findings, shows nothing."""
+    assert store.finding("f:handfiled") is None
+
+    store.upsert_finding("f:handfiled", "t", "d", "high")
+    store.attach_issue("f:handfiled", 2, "https://github.com/o/r/issues/2")
+
+    row = store.finding("f:handfiled")
+    assert row["issue_number"] == 2
