@@ -222,25 +222,28 @@ class SessionRecord:
     updated_at: int = 0
 
     @property
-    def has_output(self) -> bool:
+    def answered(self) -> bool:
+        """Produced structured output — the only reliable completion signal.
+
+        Devin does not report `finished` for a session that emits output and
+        ends its turn; it moves to `waiting_for_user`, and roughly thirty
+        minutes later to `suspended`/`inactivity`. Status alone therefore cannot
+        distinguish "done" from "gave up".
+        """
         return bool(self.structured_output)
 
     @property
     def is_terminal(self) -> bool:
-        """Has this session finished the work we asked for?
+        """Will not progress further without intervention.
 
-        Note the `waiting_for_user` case. Observed on a real session: the agent
-        emitted its structured output, ended its turn, and moved to
-        `waiting_for_user` — it never reports `finished`. Treating that as a
-        stall would mean waiting forever for a session that had already
-        answered. **Structured output is the completion signal; the status field
-        is not.**
+        Terminal is not the same as successful — a session that ran out of
+        budget is terminal and useless. `answered` is what separates them.
         """
-        if self.status in ("exit", "error"):
+        if self.status in ("exit", "error", "suspended"):
             return True
         if self.status == "running" and self.status_detail == "finished":
             return True
-        return self.needs_human and self.has_output
+        return self.needs_human and self.answered
 
     @property
     def needs_human(self) -> bool:
@@ -248,15 +251,24 @@ class SessionRecord:
 
     @property
     def is_stalled(self) -> bool:
-        """Waiting on a person, with nothing to show for it.
+        """Blocked on a person right now, with nothing to show for it.
 
-        The distinction from `is_terminal` matters: a session that answered and
-        then idled is done, while one that stopped to ask a question is blocked,
-        billing, and nobody has been told. Only the second is a problem, and
-        conflating them means either chasing sessions that finished or missing
-        ones that are stuck.
+        Distinct from `is_terminal`: a session that answered and then idled is
+        done, while one that stopped to ask a question is blocked and billing.
         """
-        return self.needs_human and not self.has_output
+        return self.needs_human and not self.answered
+
+    @property
+    def abandoned(self) -> bool:
+        """Stopped without ever answering.
+
+        This is the case that would otherwise vanish. A stalled session is only
+        `waiting_for_user` for about thirty minutes before Devin suspends it for
+        inactivity — at which point it stops matching `is_stalled` and starts
+        matching `is_terminal`. Without this it would quietly be counted as a
+        completed session that produced nothing.
+        """
+        return self.is_terminal and not self.answered
 
     def to_row(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)

@@ -51,6 +51,7 @@ class FindingRow:
     first_seen: int
     verdict_at: int | None
     stalled: bool
+    abandoned: bool
     unverifiable: str | None
 
     @property
@@ -70,6 +71,8 @@ class FindingRow:
     def status(self) -> str:
         if self.stalled:
             return "STALLED"
+        if self.abandoned and not (self.triage or self.outcome):
+            return "ABANDONED"
         if self.outcome:
             return self.outcome
         if self.triage:
@@ -89,6 +92,12 @@ class Report:
     sessions_complete: int
     stalled_sessions: list[dict[str, Any]]
     acus_are_reliable: bool
+    abandoned_sessions: list[dict[str, Any]] = dataclasses.field(default_factory=list)
+    """Stopped without ever answering. Would otherwise disappear: a stalled
+    session is only `waiting_for_user` for about thirty minutes before Devin
+    suspends it for inactivity, at which point it stops looking stalled and
+    starts looking complete."""
+
     active_sessions: list[dict[str, Any]] = dataclasses.field(default_factory=list)
     """Sessions in flight right now. Only meaningful while the collector is
     running, which is why the live view exists at all — a static render of this
@@ -171,12 +180,22 @@ def build(store: Store) -> Report:
             first_seen=finding["first_seen"],
             verdict_at=verdict_at,
             stalled=any(_is_stalled(s) for s in sessions),
+            abandoned=any(_is_abandoned(s) for s in sessions),
             unverifiable=unverifiable,
         ))
 
     active_sessions: list[dict[str, Any]] = []
+    abandoned_sessions: list[dict[str, Any]] = []
     for session in store.sessions():
-        if _is_stalled(session):
+        if _is_abandoned(session):
+            abandoned_sessions.append({
+                "session_id": session["session_id"],
+                "url": session["url"],
+                "finding": session["finding_key"],
+                "detail": session["status_detail"] or session["status"],
+                "ended": session["completed_at"],
+            })
+        elif _is_stalled(session):
             stalled_sessions.append({
                 "session_id": session["session_id"],
                 "url": session["url"],
@@ -205,6 +224,7 @@ def build(store: Store) -> Report:
         sessions=counts["sessions"],
         sessions_complete=counts["sessions_complete"],
         stalled_sessions=stalled_sessions,
+        abandoned_sessions=abandoned_sessions,
         active_sessions=active_sessions,
         # Devin's consumption endpoints aggregate on a delay; a zero here means
         # "not reported yet", not "free". Saying so is better than printing a
@@ -214,8 +234,19 @@ def build(store: Store) -> Report:
 
 
 def _is_stalled(session: sqlite3.Row) -> bool:
+    """Blocked on a person right now, with nothing produced yet."""
     return (session["status_detail"] in ("waiting_for_user", "waiting_for_approval")
             and not session["structured_output"])
+
+
+def _is_abandoned(session: sqlite3.Row) -> bool:
+    """Stopped without answering — out of budget, errored, or idled out.
+
+    The store sets `completed_at` from `SessionRecord.is_terminal`, so a row
+    with a completion timestamp and no structured output is one that ended
+    having produced nothing.
+    """
+    return bool(session["completed_at"]) and not session["structured_output"]
 
 
 # ---------------------------------------------------------------- rendering

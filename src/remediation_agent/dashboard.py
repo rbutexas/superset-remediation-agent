@@ -39,6 +39,7 @@ OUTCOME_STYLE: dict[str, tuple[str, str]] = {
     "blocked_upstream":       ("series-3", "Blocked upstream"),
     "mitigated":              ("series-4", "Mitigated"),
     "STALLED":                ("critical", "Stalled"),
+    "ABANDONED":              ("critical", "Ended without answering"),
     "failed_verification":    ("critical", "Failed verification"),
     "escalate_to_human":      ("warning",  "Escalated"),
     "remediating":            ("muted",    "Remediating"),
@@ -184,21 +185,40 @@ def _tiles(report: Report) -> str:
 
 
 def _stalled_panel(report: Report) -> str:
-    if not report.stalled_sessions:
+    blocks = []
+
+    if report.stalled_sessions:
+        items = "".join(
+            f'<li><a href="{esc(s["url"])}">{esc(s["finding"] or s["session_id"][:12])}</a>'
+            f' — waiting {_duration(report.generated_at - s["waiting_since"])}</li>'
+            for s in report.stalled_sessions
+        )
+        blocks.append(
+            '<div class="callout bad"><span class="ico">!</span><div>'
+            f'<b>{len(report.stalled_sessions)} session(s) blocked on a person.</b> '
+            'Each is consuming budget while waiting, and nobody has been told.'
+            f'<ul>{items}</ul></div></div>'
+        )
+
+    if report.abandoned_sessions:
+        items = "".join(
+            f'<li><a href="{esc(s["url"])}">{esc(s["finding"] or s["session_id"][:12])}</a>'
+            f' — {esc(s["detail"])}</li>'
+            for s in report.abandoned_sessions
+        )
+        blocks.append(
+            '<div class="callout bad"><span class="ico">!</span><div>'
+            f'<b>{len(report.abandoned_sessions)} session(s) ended without '
+            'answering.</b> Out of budget, errored, or idled out after waiting '
+            'too long. These would otherwise be counted as completed.'
+            f'<ul>{items}</ul></div></div>'
+        )
+
+    if not blocks:
         return ('<div class="callout ok"><span class="ico">✓</span>'
-                '<div><b>Nothing stalled.</b> No session is waiting on a person.</div>'
-                '</div>')
-    items = "".join(
-        f'<li><a href="{esc(s["url"])}">{esc(s["finding"] or s["session_id"][:12])}</a>'
-        f' — waiting {_duration(report.generated_at - s["waiting_since"])}</li>'
-        for s in report.stalled_sessions
-    )
-    return (
-        '<div class="callout bad"><span class="ico">!</span><div>'
-        f'<b>{len(report.stalled_sessions)} session(s) blocked on a person.</b> '
-        'Each is consuming budget while waiting, and nobody has been told.'
-        f'<ul>{items}</ul></div></div>'
-    )
+                '<div><b>Nothing blocked.</b> No session is waiting on a person '
+                'or has stopped without answering.</div></div>')
+    return "".join(blocks)
 
 
 def _active_panel(report: Report) -> str:
