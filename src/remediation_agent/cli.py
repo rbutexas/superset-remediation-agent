@@ -12,6 +12,7 @@ cost money, so each escalation in consequence is a separate, explicit verb.
     collect     poll, record, and advance triage into remediation       (free)
     report      render the dashboard to stdout or a file                (free)
     serve       live dashboard on localhost, updating as sessions run    (free)
+    cleanup     find and terminate any session still holding resources   (free)
     status      one-line health check                                   (free)
 
 `--dry-run` works on every verb that would otherwise create something.
@@ -26,8 +27,8 @@ import sys
 
 from . import automations as auto
 from .collector import Collector
-from .config import Config, ConfigError
-from .devin import DevinClient
+from .config import CAMPAIGN_TAG, Config, ConfigError
+from .devin import DevinClient, to_record
 from .dispatch import Dispatcher
 from .github import GitHubClient
 from .models import Finding
@@ -231,6 +232,58 @@ def cmd_serve(args, cfg: Config) -> int:
     return 0
 
 
+def cmd_cleanup(args, cfg: Config) -> int:
+    """Terminate sessions that are done but still open.
+
+    Devin sleeps an idle session after ~30 minutes, and a slept session does not
+    consume. This is belt-and-braces: it makes the end deliberate, and it means
+    nothing is left holding VM state because a collector was interrupted.
+
+    A session that is still working, or is stalled waiting on a person, is left
+    alone — killing either would destroy work or a pending decision.
+    """
+    devin = DevinClient(cfg)
+    everything = not args.campaign_only
+
+    listed = (devin.list_sessions() if everything
+              else devin.list_sessions(tags=[CAMPAIGN_TAG]))
+
+    kept, ended, skipped = 0, 0, []
+    for payload in listed:
+        rec = to_record(payload)
+
+        if rec.status in ("exit", "error"):
+            continue                       # already over
+        if rec.is_stalled:
+            skipped.append((rec, "stalled — a human may still want to reply"))
+            continue
+        if not rec.is_terminal:
+            skipped.append((rec, f"still active ({rec.status_detail or rec.status})"))
+            continue
+
+        kept += 1
+        if cfg.dry_run:
+            print(f"  would terminate  {rec.session_id[:12]}  {(rec.title or '')[:52]}")
+            continue
+        try:
+            devin.terminate_session(rec.session_id)
+            ended += 1
+            print(f"  terminated       {rec.session_id[:12]}  {(rec.title or '')[:52]}")
+        except Exception as exc:                      # noqa: BLE001
+            print(f"  FAILED           {rec.session_id[:12]}: {exc}")
+
+    for rec, why in skipped:
+        print(f"  left alone       {rec.session_id[:12]}  {why}")
+
+    if not kept and not skipped:
+        print("  nothing to do — no open sessions")
+    elif cfg.dry_run:
+        print(f"\n{kept} session(s) would be terminated (dry run)")
+    else:
+        print(f"\n{ended} session(s) terminated, {len(skipped)} left alone")
+    return 0
+
+
 def cmd_status(args, cfg: Config) -> int:
     devin = DevinClient(cfg)
     who = devin.whoami()
@@ -244,6 +297,12 @@ def cmd_status(args, cfg: Config) -> int:
     for name in (auto.LABEL_AUTOMATION, auto.SCHEDULE_AUTOMATION):
         state = "enabled" if live.get(name) else ("disabled" if name in live else "absent")
         print(f"           {name}: {state}")
+
+    open_sessions = [to_record(p) for p in devin.list_sessions()]
+    still_open = [r for r in open_sessions
+                  if r.status not in ("exit", "error") and not r.is_terminal]
+    print(f"sessions : {len(open_sessions)} total, {len(still_open)} still open"
+          + ("  → run `cleanup`" if still_open else ""))
 
     with Store(cfg.db_path) as store:
         counts = store.counts()
@@ -319,6 +378,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-collect", action="store_true",
                    help="serve a static view without advancing the pipeline")
     s.set_defaults(func=cmd_serve)
+
+    s = sub.add_parser("cleanup", help="terminate finished sessions still open")
+    s.add_argument("--campaign-only", action="store_true",
+                   help="only sessions tagged for this campaign")
+    s.set_defaults(func=cmd_cleanup)
 
     s = sub.add_parser("status", help="one-line health check")
     s.set_defaults(func=cmd_status)

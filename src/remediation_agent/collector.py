@@ -59,11 +59,14 @@ class Tick:
 class Collector:
     def __init__(self, cfg: Config, devin: DevinClient, store: Store,
                  dispatcher: Dispatcher | None = None,
-                 findings: dict[str, Finding] | None = None) -> None:
+                 findings: dict[str, Finding] | None = None,
+                 terminate_finished: bool = True) -> None:
         self.cfg = cfg
         self.devin = devin
         self.store = store
         self.dispatcher = dispatcher
+        self.terminate_finished = terminate_finished
+        self._terminated: set[str] = set()
         # Findings are needed to build a remediation prompt when triage promotes
         # one. Without them the collector can still observe, just not advance.
         self.findings = findings or {}
@@ -99,8 +102,37 @@ class Collector:
 
             result.completed.append(record)
             self._advance(record, result)
+            self._teardown(record, result)
 
         return result
+
+    # -------------------------------------------------------------- teardown
+
+    def _teardown(self, record: SessionRecord, result: Tick) -> None:
+        """End a session once its output is safely recorded.
+
+        Only ever called for a session that answered — a stalled one is left
+        alone, because a human may still want to reply to it. The local set
+        avoids re-issuing the call on every subsequent poll.
+        """
+        if not self.terminate_finished or not record.answered:
+            return
+        if record.session_id in self._terminated:
+            return
+        if record.status in ("exit", "error"):
+            self._terminated.add(record.session_id)
+            return
+
+        try:
+            self.devin.terminate_session(record.session_id)
+        except Exception as exc:                      # noqa: BLE001
+            log.warning("could not terminate %s: %s", record.session_id[:12], exc)
+            result.errors.append(f"terminate {record.session_id[:12]}: {exc}")
+            return
+
+        self._terminated.add(record.session_id)
+        self.store.log("session.terminated", record.session_id,
+                       "output recorded; session ended")
 
     # --------------------------------------------------------------- advance
 

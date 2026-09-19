@@ -161,3 +161,28 @@ def test_stopping_on_a_guardrail_is_a_success():
     assert RemediationOutcome.ABANDONED_ON_GUARDRAIL.is_success
     assert not RemediationOutcome.ABANDONED_ON_GUARDRAIL.produced_code
     assert not RemediationOutcome.FAILED_VERIFICATION.is_success
+
+
+# ------------------------------------------------------------------ hygiene
+
+def test_sessions_are_created_disposable_by_default():
+    """The API defaults `resumable` to true, which preserves VM state after a
+    session stops. Ours are read-once and never resumed, so that state is
+    overhead we should not be holding."""
+    import inspect
+
+    from remediation_agent.devin import DevinClient
+
+    sig = inspect.signature(DevinClient.create_session)
+    assert sig.parameters["resumable"].default is False
+
+
+def test_only_answered_sessions_are_torn_down():
+    """A stalled session must survive: a human may still want to reply to it.
+    An answered one has given us everything it is going to."""
+    answered = session(status_detail="waiting_for_user",
+                       structured_output={"decision": "remediate"})
+    stalled = session(status_detail="waiting_for_user")
+
+    assert answered.answered and not answered.is_stalled
+    assert stalled.is_stalled and not stalled.answered

@@ -647,3 +647,37 @@ get right for every audience: fast enough to feel live, slow enough not to
 hammer the API.
 
 **Where.** `serve.py`, `dashboard.py::render(live=True)`, `cli.py::cmd_serve`
+
+---
+
+## 31. Sessions are disposable, and ended deliberately
+
+`create_session` passes `resumable: false`, against the API's own default of
+`true`. The collector terminates a session once its structured output is
+recorded, and `remediation-agent cleanup` sweeps anything left open.
+
+**Why.** A resumable session preserves its VM state after stopping so it can be
+picked up later. Ours are read-once — we take the structured output and never
+resume — so that state was being held for nothing. Every session created before
+this change defaulted to resumable, which was an oversight rather than a choice.
+
+Termination is safe: verified against a real session that the record, its
+structured output and the web replay all survive, so nothing needed as evidence
+is lost.
+
+**What this does not fix.** It was prompted by a reasonable hypothesis — that
+consumption reads as `0.00` because sessions never fully tear down, so billing
+never finalises. **Tested, and it is not the cause.** The calibration session was
+terminated; the record confirmed it, and `acus_consumed` and
+`consumption/daily` both stayed at zero. The org's quota page had already
+counted the session, so the quota system saw it and the ACU endpoints simply do
+not report on this tier. The change stands on its own merits.
+
+**Cost.** A terminated session cannot be resumed to ask a follow-up question. That
+is the right trade here — a follow-up would be a new session with a better
+prompt, not a continuation of one that already answered — but it is a door
+closed. `cleanup` deliberately leaves stalled and still-working sessions alone,
+since killing either destroys a pending decision or live work.
+
+**Where.** `devin.py::create_session`, `terminate_session`,
+`collector.py::_teardown`, `cli.py::cmd_cleanup`

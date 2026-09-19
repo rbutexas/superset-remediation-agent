@@ -58,12 +58,19 @@ class DevinClient:
         knowledge_ids: list[str] | None = None,
         output_schema: dict[str, Any] | None = None,
         max_acu: int | None = None,
-        idempotency_key: str | None = None,
+        resumable: bool = False,
     ) -> dict[str, Any]:
-        """Create one session. `max_acu` is a hard cap enforced by Devin."""
+        """Create one session. `max_acu` is a hard cap enforced by Devin.
+
+        `resumable` defaults to False here, against the API's own default of
+        True. A resumable session preserves its VM state after stopping so it
+        can be picked up again; ours are disposable — we read the structured
+        output once and never resume — so holding that state is pure overhead.
+        """
         body: dict[str, Any] = {
             "prompt": prompt,
             "max_acu_limit": max_acu if max_acu is not None else self.cfg.max_acu_per_session,
+            "resumable": resumable,
         }
         if title:
             body["title"] = title
@@ -91,6 +98,25 @@ class DevinClient:
         yield from self.http.paginate(
             f"/v3/organizations/{self.org}/sessions", first=first, tags=tags
         )
+
+    def terminate_session(self, session_id: str) -> dict[str, Any]:
+        """Stop a session for good.
+
+        Verified against a real session: the record, its structured output and
+        the web replay all survive termination, so nothing needed for evidence
+        is lost. Devin also puts an idle session to sleep after about thirty
+        minutes on its own — this just makes the end deliberate rather than
+        waiting for a timeout.
+        """
+        log.info("terminating session %s", session_id)
+        return self.http.delete(
+            f"/v3/organizations/{self.org}/sessions/{session_id}")
+
+    def archive_session(self, session_id: str) -> dict[str, Any]:
+        """Sleep and hide a session without ending it. Kept for the case where
+        a stalled session may still want a human reply."""
+        return self.http.post(
+            f"/v3/organizations/{self.org}/sessions/{session_id}/archive")
 
     def send_message(self, session_id: str, message: str) -> Any:
         return self.http.post(
