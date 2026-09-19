@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import os
 import pathlib
 import sqlite3
 import threading
@@ -81,19 +82,43 @@ def now() -> int:
 
 
 class Store:
-    def __init__(self, path: pathlib.Path) -> None:
+    def __init__(self, path: pathlib.Path, *, read_only: bool | None = None) -> None:
+        """Open the store, read-only when the file cannot be written.
+
+        `read_only` is detected rather than declared, because the case that
+        needs it is one nobody remembers to declare: the committed evidence
+        snapshot is mounted read-only into the replay container, and SQLite
+        cannot open it at all if the connection tries to set a pragma or run
+        the schema script. That failed as `unable to open database file`, which
+        names neither the mount nor the write.
+
+        Pass it explicitly to assert the intent; leave it None to work it out.
+        """
         self.path = path
+        self._lock = threading.Lock()
+
+        if read_only is None:
+            read_only = path.exists() and not os.access(path.parent, os.W_OK)
+        self.read_only = read_only
+
+        if read_only:
+            # immutable=1 also tells SQLite there is no -wal to look for, which
+            # there is not: the snapshot is checkpointed before it is copied.
+            uri = f"file:{path}?mode=ro&immutable=1"
+            self.conn = sqlite3.connect(uri, uri=True, check_same_thread=False)
+            self.conn.row_factory = sqlite3.Row
+            return
+
         path.parent.mkdir(parents=True, exist_ok=True)
         # `serve` runs the collector on a background thread while the HTTP
         # server answers on others. A connection pinned to its creating thread
         # raises ProgrammingError on every tick — silently, in a thread nobody
         # is reading — so the pipeline just quietly stops advancing.
-        # check_same_thread=False lifts the pin; the lock below restores the
-        # safety it was providing. Serialising writes is fine at a handful of
-        # rows per poll, and WAL keeps reads concurrent with them.
+        # check_same_thread=False lifts the pin; the lock restores the safety it
+        # was providing. Serialising writes is fine at a handful of rows per
+        # poll, and WAL keeps reads concurrent with them.
         self.conn = sqlite3.connect(path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
-        self._lock = threading.Lock()
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.execute("PRAGMA foreign_keys=ON")
         self.conn.executescript(SCHEMA)
@@ -110,6 +135,8 @@ class Store:
 
     @contextlib.contextmanager
     def tx(self) -> Iterator[sqlite3.Connection]:
+        if self.read_only:
+            raise RuntimeError(f"{self.path} is open read-only")
         with self._lock:
             try:
                 yield self.conn

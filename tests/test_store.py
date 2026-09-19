@@ -235,3 +235,44 @@ def test_a_finding_can_be_adopted_from_a_session(store):
 
     row = store.finding("f:handfiled")
     assert row["issue_number"] == 2
+
+
+def test_a_read_only_store_can_be_read(tmp_path):
+    """The committed evidence snapshot is mounted read-only into the replay
+    container. SQLite cannot open it at all if the connection tries to set a
+    pragma or run the schema — it fails as `unable to open database file`,
+    naming neither the mount nor the write."""
+    import os
+
+    path = tmp_path / "ro.db"
+    with Store(path) as s:
+        s.upsert_finding("f:1", "recorded", "d", "high")
+        s.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    os.chmod(tmp_path, 0o555)          # directory no longer writable
+    try:
+        store = Store(path)
+        assert store.read_only
+        assert store.findings()[0]["title"] == "recorded"
+        store.close()
+    finally:
+        os.chmod(tmp_path, 0o755)
+
+
+def test_a_read_only_store_refuses_writes(tmp_path):
+    import os
+    import pytest
+
+    path = tmp_path / "ro.db"
+    with Store(path) as s:
+        s.upsert_finding("f:1", "t", "d", "high")
+        s.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+
+    os.chmod(tmp_path, 0o555)
+    try:
+        store = Store(path)
+        with pytest.raises(RuntimeError, match="read-only"):
+            store.upsert_finding("f:2", "t", "d", "high")
+        store.close()
+    finally:
+        os.chmod(tmp_path, 0o755)

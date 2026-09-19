@@ -69,88 +69,169 @@ That split is the whole design. If the verdict came from an `if` statement in th
 
 ---
 
-## Reproducing this
+## Reviewer walkthrough
 
-There are two tiers, and the first needs nothing from you.
+Two tiers. The first needs nothing from you and takes about two minutes.
 
-### Tier 1 — verify the findings are real (no credentials)
+### Prerequisites
 
-The claim most worth checking is that the findings are genuine and were detected
-rather than authored. That needs no account:
+Docker, and that is all. Everything below runs in a container; nothing is
+installed on your machine and no token is read.
+
+*(Python 3.11+ optionally, if you would rather run the tests directly.)*
+
+---
+
+### Tier 1 — see it working, with no account
+
+**Step 1. Clone and start the dashboard.**
 
 ```bash
 git clone https://github.com/rbutexas/superset-remediation-agent
 cd superset-remediation-agent
-
-docker compose run --rm checkout     # shallow-clone superset, ~440 MB / 16s
-docker compose run --rm scan         # detect findings, print the routing table
+docker compose up replay
 ```
 
-Expect four findings, and a routing table explaining why each needs an agent's
-judgement rather than a rule. Nothing is created, nothing is spent, no token is
-read.
+First run builds the image, roughly a minute. You will see:
 
-And to see the dashboard with real results in it — a recorded run, replayed:
+```
+  dashboard   http://localhost:8766
+  json        http://localhost:8766/api/report.json
+  refreshing  every 5s
+```
+
+**Step 2. Open <http://localhost:8766>.**
+
+The dashboard, showing a **recorded run against the real repository** — findings
+detected, what the agent decided about each, how long it took, and a link
+through to the agent's own transcript. Every row came from a real session;
+nothing is authored.
+
+Port already in use? `REPLAY_PORT=8777 docker compose up replay`.
+
+**Step 3. Find the issues yourself, live.**
 
 ```bash
-docker compose up replay             # http://localhost:8766
+docker compose run --rm checkout    # shallow-clone superset, ~440 MB / 16s
+docker compose run --rm scan        # detect findings against the real repo
 ```
 
-That reads `docs/evidence/run.db`, a committed snapshot of an actual run. Every
-row in it came from a real session; nothing is authored. The same data is in
-`run.json` and `run.txt` for anyone who would rather read it than run it.
+Four findings, and a routing table explaining why each one needs an agent's
+judgement rather than a rule. This reads the actual repository over the network
+— it is not replaying anything.
 
-To check the individual claims those findings rest on — versions, advisory
-ranges, pull-request states across two repositories:
+**Step 4. Check the claims those findings rest on.**
 
 ```bash
-python3 tools/verify_claims.py --repo ./work/superset   # 42 assertions
-python3 -m pytest                                        # 60 tests
+pip install pytest && python3 -m pytest        # 63 tests
+python3 tools/verify_claims.py --repo ./work/superset
 ```
 
-### Tier 2 — run the pipeline (your own credentials, your own fork)
+The second re-derives every factual statement in the issue set — versions,
+advisory ranges, pull-request states across two repositories — as 42 assertions
+against live APIs. If a claim is not in there and passing, it is not in an issue.
+
+**Step 5. See what would be dispatched, without dispatching it.**
+
+```bash
+docker compose run --rm scan --json | head -40
+```
+
+---
+
+### Tier 2 — run the pipeline against your own fork
 
 The pipeline cannot be pointed at someone else's Devin organisation or GitHub
-repository, so reproducing it end to end means standing up your own:
+repository, so this means standing up your own.
 
-1. Fork `apache/superset`. Enable **Issues** and **Actions** — both are off by
-   default on a fork.
-2. Connect the fork in Devin: **Settings → Connections → GitHub**.
-   **If your fork is public, also set Automation scope → All installed repos.**
-   GitHub automations are private-repo-only by default, and without this the
-   triggers never fire — silently.
-3. A fine-grained GitHub token scoped to the fork, with five permissions:
-   Metadata:R, Issues:RW, Contents:RW, Pull requests:RW, Actions:R.
-4. `cp .env.example ~/.devin.env`, fill in three values, `chmod 600`.
+**Step 1. Fork `apache/superset`.** Then enable two things that are **off by
+default on a fork**:
 
-Then:
+- *Settings → Features → Issues*
+- the *Actions* tab → "I understand my workflows, go ahead and enable them"
+
+**Step 2. Connect the fork in Devin** — *Settings → Connections → GitHub*.
+Grant access to that repository only.
+
+> **If your fork is public, also set Automation scope → All installed repos**
+> on the connection. GitHub automations are private-repo-only by default, and
+> without this the triggers never fire — with no error anywhere. Devin's own
+> reasoning is prompt-injection risk on public repos; the triggers here require
+> a *label*, which requires write access, so the exposure is collaborators
+> rather than the internet.
+
+**Step 3. Create a fine-grained GitHub token** scoped to the fork, with five
+permissions: Metadata:R, Issues:RW, Contents:RW, Pull requests:RW, Actions:R.
+Deliberately not Administration, Workflows or Secrets.
+
+**Step 4. Credentials.**
 
 ```bash
-docker compose run --rm agent status       # credentials, triggers, automations
-docker compose run --rm agent provision --disabled
-docker compose run --rm agent file         # create the issues; nothing fires yet
-docker compose run --rm agent arm          # now a label starts a session
-docker compose up agent                    # dashboard on http://localhost:8765
+cp .env.example ~/.devin.env && chmod 600 ~/.devin.env
+$EDITOR ~/.devin.env        # three values
 ```
 
-Label an issue `agent:triage` and watch. The dashboard is bound to loopback
-deliberately — it shows issue detail and session URLs for your repository and
-has no authentication.
+**Step 5. Check everything is wired up before spending anything.**
 
-### What a reviewer cannot reproduce
+```bash
+docker compose run --rm agent status
+```
 
-Being straight about this:
+Expect credentials to resolve, all required triggers present, and automations
+absent.
+
+**Step 6. Provision, disarmed.**
+
+```bash
+docker compose run --rm agent provision --disabled
+```
+
+Creates two playbooks, the labels, and three automations — **inert**. You can
+inspect them in the Devin UI. Nothing fires.
+
+**Step 7. File the issues.** Free, because nothing is listening yet.
+
+```bash
+docker compose run --rm agent file
+```
+
+**Step 8. Arm.** This is the switch: from here, labelling an issue starts a
+session and spends credits.
+
+```bash
+docker compose run --rm agent arm
+```
+
+**Step 9. Start the dashboard**, with the collector advancing behind it.
+
+```bash
+docker compose up agent          # http://localhost:8765
+```
+
+**Step 10. Label an issue `agent:triage`** and watch. Within seconds a session
+appears; the board moves to *Being assessed*; when the verdict lands the
+reasoning is posted to the issue and the item is either closed or promoted to
+`agent:remediate`, which starts a remediation session.
+
+To stop everything: `docker compose run --rm agent arm --off`, then
+`docker compose run --rm agent cleanup`.
+
+---
+
+### What you cannot reproduce
+
+Being straight about it:
 
 - **The exact sessions.** Session IDs and transcripts live in the Devin
-  organisation that ran them. `docs/evidence/` carries the raw structured output
-  from real runs so the results can be inspected without access.
+  organisation that ran them. `docs/evidence/` carries the raw structured
+  output so the results can be inspected without access.
 - **The cost figures.** ACU consumption is not reported by the API on the Teams
   tier — see decision 31. The dashboard prints "not yet reported" rather than a
   confident zero.
 - **Identical findings, forever.** The detectors read live data. When Superset
-  merges the `simple-zstd` upgrade, that finding correctly disappears. The
-  findings are a snapshot of a real repository, not a fixture — which is the
-  point, and also why `tools/verify_claims.py` exists to re-prove them.
+  merges the `simple-zstd` upgrade, that finding correctly disappears. These are
+  a snapshot of a real repository, not a fixture — which is the point, and why
+  `tools/verify_claims.py` exists to re-prove them on demand.
 
 ## Commands
 

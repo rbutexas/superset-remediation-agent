@@ -1,6 +1,6 @@
 {
-  "label": "after the xlsx triage run",
-  "captured_at": 1789831433,
+  "label": "xlsx triage, real run",
+  "captured_at": 1789831901,
   "counts": {
     "findings": 1,
     "issues_filed": 1,
