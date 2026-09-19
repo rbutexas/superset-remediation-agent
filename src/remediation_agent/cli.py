@@ -441,8 +441,19 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     _setup_logging(args.verbose)
 
+    # Only demand the credentials this command will actually use, so the
+    # read-only verbs work with none at all.
+    needs: dict[str, tuple[str, ...]] = {
+        "scan": (),
+        "report": (),
+        "file": ("GITHUB_TOKEN",),
+    }
     try:
-        cfg = Config.from_env(dry_run=args.dry_run)
+        cfg = Config.from_env(
+            dry_run=args.dry_run,
+            require=needs.get(args.command,
+                              ("DEVIN_API_KEY", "DEVIN_ORG_ID", "GITHUB_TOKEN")),
+        )
     except ConfigError as exc:
         print(f"configuration error: {exc}", file=sys.stderr)
         return 2

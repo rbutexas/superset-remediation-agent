@@ -52,39 +52,78 @@ That split is the whole design. If the verdict came from an `if` statement in th
 
 ---
 
-## Quick start
+## Reproducing this
 
-### Docker
+There are two tiers, and the first needs nothing from you.
+
+### Tier 1 — verify the findings are real (no credentials)
+
+The claim most worth checking is that the findings are genuine and were detected
+rather than authored. That needs no account:
 
 ```bash
 git clone https://github.com/rbutexas/superset-remediation-agent
 cd superset-remediation-agent
 
-cp .env.example ~/.devin.env && chmod 600 ~/.devin.env
-$EDITOR ~/.devin.env          # fill in three values
-
-docker compose run --rm checkout            # shallow-clone superset (~440 MB, 16s)
-docker compose build
-
-docker compose run --rm agent status        # verify credentials and triggers
-docker compose run --rm agent scan --repo-path /work/superset
+docker compose run --rm checkout     # shallow-clone superset, ~440 MB / 16s
+docker compose run --rm scan         # detect findings, print the routing table
 ```
 
-`scan` is free and read-only. Nothing is created until you ask.
+Expect four findings, and a routing table explaining why each needs an agent's
+judgement rather than a rule. Nothing is created, nothing is spent, no token is
+read.
 
-### Local
+To check the individual claims those findings rest on — versions, advisory
+ranges, pull-request states across two repositories:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install -e '.[dev]'
-git clone --depth 1 https://github.com/apache/superset.git /tmp/ss
-
-.venv/bin/remediation-agent scan --repo-path /tmp/ss
-.venv/bin/python -m pytest
+python3 tools/verify_claims.py --repo ./work/superset   # 42 assertions
+python3 -m pytest                                        # 60 tests
 ```
 
-Requires Python 3.11+. **No runtime dependencies** — a tool whose subject is dependency risk should not arrive with a transitive tree of its own. `pytest` is the only dev dependency.
+### Tier 2 — run the pipeline (your own credentials, your own fork)
 
----
+The pipeline cannot be pointed at someone else's Devin organisation or GitHub
+repository, so reproducing it end to end means standing up your own:
+
+1. Fork `apache/superset`. Enable **Issues** and **Actions** — both are off by
+   default on a fork.
+2. Connect the fork in Devin: **Settings → Connections → GitHub**.
+   **If your fork is public, also set Automation scope → All installed repos.**
+   GitHub automations are private-repo-only by default, and without this the
+   triggers never fire — silently.
+3. A fine-grained GitHub token scoped to the fork, with five permissions:
+   Metadata:R, Issues:RW, Contents:RW, Pull requests:RW, Actions:R.
+4. `cp .env.example ~/.devin.env`, fill in three values, `chmod 600`.
+
+Then:
+
+```bash
+docker compose run --rm agent status       # credentials, triggers, automations
+docker compose run --rm agent provision --disabled
+docker compose run --rm agent file         # create the issues; nothing fires yet
+docker compose run --rm agent arm          # now a label starts a session
+docker compose up agent                    # dashboard on http://localhost:8765
+```
+
+Label an issue `agent:triage` and watch. The dashboard is bound to loopback
+deliberately — it shows issue detail and session URLs for your repository and
+has no authentication.
+
+### What a reviewer cannot reproduce
+
+Being straight about this:
+
+- **The exact sessions.** Session IDs and transcripts live in the Devin
+  organisation that ran them. `docs/evidence/` carries the raw structured output
+  from real runs so the results can be inspected without access.
+- **The cost figures.** ACU consumption is not reported by the API on the Teams
+  tier — see decision 31. The dashboard prints "not yet reported" rather than a
+  confident zero.
+- **Identical findings, forever.** The detectors read live data. When Superset
+  merges the `simple-zstd` upgrade, that finding correctly disappears. The
+  findings are a snapshot of a real repository, not a fixture — which is the
+  point, and also why `tools/verify_claims.py` exists to re-prove them.
 
 ## Commands
 
@@ -98,7 +137,12 @@ Deliberately separate verbs, ordered by consequence. Scanning is free; filing wr
 | `dispatch` | Start triage sessions. **Spends credits.** |
 | `collect` | Poll sessions, record state, advance triage into remediation. Free. |
 | `report` | Render the dashboard — `--format text\|html\|json`. Free. |
+| `serve` | Live dashboard on localhost, updating as sessions run. Free. |
+| `arm` | Arm or disarm the automations. **Arming makes `file` cost money.** |
+| `cleanup` | Terminate finished sessions still holding resources. Free. |
 | `status` | Credentials, trigger support, automation state, store totals. Free. |
+
+`scan` and `report` need **no credentials at all** — they touch neither API.
 
 `--dry-run` works on every verb that would otherwise create something. It resolves findings, renders the exact prompts, and prints what *would* be dispatched.
 

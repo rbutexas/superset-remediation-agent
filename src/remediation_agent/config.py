@@ -64,13 +64,19 @@ class Config:
     this is ours."""
 
     @classmethod
-    def from_env(cls, *, dry_run: bool = False, env_file: pathlib.Path | None = None) -> "Config":
+    def from_env(cls, *, dry_run: bool = False, env_file: pathlib.Path | None = None,
+                 require: tuple[str, ...] = ("DEVIN_API_KEY", "DEVIN_ORG_ID",
+                                             "GITHUB_TOKEN")) -> "Config":
+        """Build config, demanding only the credentials the caller will use.
+
+        `scan` and `report` are read-only and touch neither API, so requiring a
+        Devin key to run them turns "check that the findings are real" — the
+        claim most worth verifying — into "first go and get an account". The
+        caller states what it needs; anything else is left blank.
+        """
         load_env_file(env_file or DEFAULT_ENV_FILE)
 
-        missing = [
-            k for k in ("DEVIN_API_KEY", "DEVIN_ORG_ID", "GITHUB_TOKEN")
-            if not os.environ.get(k)
-        ]
+        missing = [k for k in require if not os.environ.get(k)]
         if missing:
             raise ConfigError(
                 "missing required environment variables: " + ", ".join(missing)
@@ -87,9 +93,9 @@ class Config:
                 raise ConfigError(f"{name} must be an integer, got {raw!r}") from None
 
         return cls(
-            devin_api_key=os.environ["DEVIN_API_KEY"],
-            devin_org_id=os.environ["DEVIN_ORG_ID"],
-            github_token=os.environ["GITHUB_TOKEN"],
+            devin_api_key=os.environ.get("DEVIN_API_KEY", ""),
+            devin_org_id=os.environ.get("DEVIN_ORG_ID", ""),
+            github_token=os.environ.get("GITHUB_TOKEN", ""),
             repo=os.environ.get("TARGET_REPO", "rbutexas/superset"),
             devin_base=os.environ.get("DEVIN_BASE", "https://api.devin.ai"),
             github_base=os.environ.get("GITHUB_BASE", "https://api.github.com"),

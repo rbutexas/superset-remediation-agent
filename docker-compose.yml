@@ -1,8 +1,39 @@
-# Secrets arrive from the environment, never from a build arg or a baked file.
-# `env_file` points at the same ~/.devin.env used locally, so there is one place
-# credentials live and it is outside the repository.
+# Secrets come from the environment, never a build arg or a baked file.
+# `env_file` points at the same ~/.devin.env used locally, so credentials live
+# in one place, outside the repository.
+#
+# Three services, in increasing order of what they need:
+#
+#   checkout   nothing          clone the repository under audit
+#   scan       nothing          detect findings and print the routing table
+#   agent      credentials      the pipeline, and the live dashboard
+#
+# A reviewer with no Devin account can still run `checkout` and `scan` and see
+# that the findings are real. That is the claim most worth verifying.
 
 services:
+
+  # Shallow-clone Superset. ~440 MB, about 16 seconds.
+  #   docker compose run --rm checkout
+  checkout:
+    image: alpine/git:latest
+    volumes:
+      - ${SUPERSET_CHECKOUT:-./work/superset}:/superset
+    command: >
+      clone --depth 1 https://github.com/apache/superset.git /superset
+
+  # Read-only. No credentials, no network writes, nothing created.
+  #   docker compose run --rm scan
+  scan:
+    build: .
+    image: remediation-agent:local
+    volumes:
+      - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro
+    command: ["scan", "--repo-path", "/work/superset"]
+
+  # The pipeline and the dashboard. Needs credentials.
+  #   docker compose up agent          -> dashboard on http://localhost:8765
+  #   docker compose run --rm agent status
   agent:
     build: .
     image: remediation-agent:local
@@ -13,18 +44,20 @@ services:
       DB_PATH: /app/data/agent.db
       MAX_ACU_PER_SESSION: ${MAX_ACU_PER_SESSION:-25}
       MAX_CONCURRENT_SESSIONS: ${MAX_CONCURRENT_SESSIONS:-3}
+    ports:
+      # Bound to 127.0.0.1 deliberately: the page shows issue detail and session
+      # URLs for a private repository and has no authentication.
+      - "127.0.0.1:${DASHBOARD_PORT:-8765}:8765"
     volumes:
-      - ./data:/app/data          # the store survives the container
-      - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro
-    # Read-only mount of the audited checkout: a scanner has no business
-    # writing to the repository it is scanning.
-    command: ["--help"]
-
-  # One-shot helper so a first run needs no local git or Python.
-  #   docker compose run --rm checkout
-  checkout:
-    image: alpine/git:latest
-    volumes:
-      - ${SUPERSET_CHECKOUT:-./work/superset}:/superset
-    command: >
-      clone --depth 1 https://github.com/apache/superset.git /superset
+      - ./data:/app/data                                        # store survives
+      - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro  # audited, read-only
+    # --host 0.0.0.0 binds inside the container; the port mapping above is what
+    # keeps it on loopback from the host's point of view.
+    command: ["serve", "--host", "0.0.0.0", "--repo-path", "/work/superset",
+              "--poll", "30"]
+    healthcheck:
+      test: ["CMD", "python3", "-c",
+             "import urllib.request;urllib.request.urlopen('http://127.0.0.1:8765/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
