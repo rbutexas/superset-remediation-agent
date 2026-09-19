@@ -12,6 +12,7 @@ cost money, so each escalation in consequence is a separate, explicit verb.
     collect     poll, record, and advance triage into remediation       (free)
     report      render the dashboard to stdout or a file                (free)
     serve       live dashboard on localhost, updating as sessions run    (free)
+    arm         arm or disarm the automations — arming makes `file` cost
     cleanup     find and terminate any session still holding resources   (free)
     status      one-line health check                                   (free)
 
@@ -98,9 +99,37 @@ def cmd_provision(args, cfg: Config) -> int:
         print("automations          : skipped")
         return 0
 
-    created = auto.ensure(devin, cfg, dry_run=cfg.dry_run)
+    created = auto.ensure(devin, cfg, dry_run=cfg.dry_run,
+                          enabled=not args.disabled)
+    state = "DISABLED" if args.disabled else "enabled"
     for name, aid in created.items():
-        print(f"automation           : {name} -> {aid}")
+        print(f"automation           : {name} -> {aid} [{state}]")
+    if args.disabled:
+        print("\nAutomations created but NOT armed. Filing an issue will not "
+              "start anything.\nArm them with:  remediation-agent arm")
+    return 0
+
+
+def cmd_arm(args, cfg: Config) -> int:
+    """Arm or disarm the automations.
+
+    Separated from `provision` because arming changes what `file` costs: with
+    the label automation live, creating an issue starts a session.
+    """
+    devin = DevinClient(cfg)
+    if cfg.dry_run:
+        print(f"[dry-run] would {'disarm' if args.off else 'arm'} both automations")
+        return 0
+
+    result = auto.set_enabled(devin, enabled=not args.off)
+    if not result:
+        print("no automations found — run `provision` first")
+        return 1
+    for name, state in result.items():
+        print(f"  {state:<9} {name}")
+    if not args.off:
+        print("\nLIVE. Applying an agent:* label to an issue now starts a "
+              "session and spends credits.")
     return 0
 
 
@@ -343,7 +372,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("provision", help="create playbooks, labels, automations")
     repo_arg(s)
     s.add_argument("--skip-automations", action="store_true")
+    s.add_argument("--disabled", action="store_true",
+                   help="create the automations but do not arm them")
     s.set_defaults(func=cmd_provision)
+
+    s = sub.add_parser("arm", help="arm/disarm the automations (arming makes "
+                                   "filing an issue cost money)")
+    s.add_argument("--off", action="store_true", help="disarm instead")
+    s.set_defaults(func=cmd_arm)
 
     s = sub.add_parser("file", help="create or update issues (writes to GitHub)")
     repo_arg(s)

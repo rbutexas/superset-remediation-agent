@@ -105,11 +105,11 @@ def _label_trigger() -> dict[str, Any]:
     }
 
 
-def label_automation_body(cfg: Config) -> dict[str, Any]:
+def label_automation_body(cfg: Config, *, enabled: bool = True) -> dict[str, Any]:
     return {
         "name": LABEL_AUTOMATION,
         "run_as": {"type": "organization"},
-        "enabled": True,
+        "enabled": enabled,
         "metadata": {"campaign": "superset-debt", "managed_by": "remediation-agent"},
         "triggers": [_label_trigger()],
         "actions": [{
@@ -140,11 +140,12 @@ def label_automation_body(cfg: Config) -> dict[str, Any]:
     }
 
 
-def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE) -> dict[str, Any]:
+def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE, *,
+                             enabled: bool = True) -> dict[str, Any]:
     return {
         "name": SCHEDULE_AUTOMATION,
         "run_as": {"type": "organization"},
-        "enabled": True,
+        "enabled": enabled,
         "metadata": {"campaign": "superset-debt", "managed_by": "remediation-agent"},
         "triggers": [{
             "event_type": "schedule:recurring",
@@ -178,7 +179,28 @@ def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE) -> dict[str
     }
 
 
-def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False) -> dict[str, str]:
+def set_enabled(devin: DevinClient, enabled: bool) -> dict[str, str]:
+    """Arm or disarm both automations.
+
+    Creating them disabled and arming them separately keeps "this exists and is
+    inspectable" apart from "this will now spend money when an issue is
+    labelled". With the label automation live, filing an issue is no longer a
+    free action.
+    """
+    result: dict[str, str] = {}
+    for a in devin.list_automations():
+        name = a.get("name")
+        if name not in (LABEL_AUTOMATION, SCHEDULE_AUTOMATION):
+            continue
+        aid = a.get("automation_id") or a.get("id")
+        devin.set_automation_enabled(str(aid), enabled)
+        result[str(name)] = "enabled" if enabled else "disabled"
+        log.info("%s -> %s", name, result[str(name)])
+    return result
+
+
+def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False,
+           enabled: bool = True) -> dict[str, str]:
     """Create both automations if absent. Returns name -> id (or a dry-run note).
 
     Deliberately does not update an automation that already exists. Silently
@@ -199,7 +221,8 @@ def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False) -> dict[st
     existing = {a.get("name"): a for a in devin.list_automations()}
     result: dict[str, str] = {}
 
-    for body in (label_automation_body(cfg), schedule_automation_body(cfg)):
+    for body in (label_automation_body(cfg, enabled=enabled),
+                 schedule_automation_body(cfg, enabled=enabled)):
         name = body["name"]
         if name in existing:
             aid = existing[name].get("automation_id") or existing[name].get("id")
@@ -208,8 +231,9 @@ def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False) -> dict[st
             continue
 
         if dry_run:
-            log.info("[dry-run] would create automation %r with trigger(s) %s",
-                     name, [t["event_type"] for t in body["triggers"]])
+            log.info("[dry-run] would create automation %r (%s) with trigger(s) %s",
+                     name, "enabled" if enabled else "DISABLED",
+                     [t["event_type"] for t in body["triggers"]])
             result[name] = "dry-run"
             continue
 
