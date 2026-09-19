@@ -18,6 +18,7 @@ Two API facts shape this module:
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Iterator
 
 from .config import Config
@@ -123,6 +124,36 @@ class DevinClient:
             f"/v3/organizations/{self.org}/sessions/{session_id}/messages",
             {"message": message},
         )
+
+    def session_context(self, session_id: str) -> tuple[str | None, int | None]:
+        """Recover (finding_key, issue_number) from a session's opening prompt.
+
+        A session started by an automation carries only static tags, and it does
+        not report its own context until it finishes. That leaves the live view
+        unable to say which issue is being worked on — precisely the thing
+        someone watching wants to know.
+
+        Devin appends the triggering event payload to the prompt, and that
+        payload contains the issue body, which carries our `finding-key` marker.
+        So the context is already there; it just has to be read out.
+
+        Best-effort by design: a failure here costs a label on a dashboard row,
+        not correctness, so it returns nulls rather than raising.
+        """
+        try:
+            payload = self.http.get(
+                f"/v3/organizations/{self.org}/sessions/{session_id}/messages")
+        except Exception as exc:                      # noqa: BLE001
+            log.debug("could not read messages for %s: %s", session_id, exc)
+            return None, None
+
+        items = payload.get("items", payload) if isinstance(payload, dict) else payload
+        blob = "\n".join(str(m.get("message") or "") for m in (items or []))
+
+        key_match = re.search(r"finding-key:\s*([\w:.\-]+)", blob)
+        issue_match = re.search(r"/issues/(\d+)", blob)
+        return (key_match.group(1) if key_match else None,
+                int(issue_match.group(1)) if issue_match else None)
 
     def session_insights(self, session_id: str) -> dict[str, Any]:
         return self.http.get(

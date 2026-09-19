@@ -114,12 +114,47 @@ def seed(store: Store) -> None:
     session("sess-ue-r", "unawaited-user-event", Stage.REMEDIATION, 104,
             detail="waiting_for_user", acus=3.1, output=None)
 
+    # --- 5-7. three running at once, to exercise the in-progress list -----
+    # The automation caps concurrency at 3, so this is the busiest the panel
+    # ever gets; a fourth event queues rather than starting.
+    for n, (key, title, stage, issue, detail, started) in enumerate([
+        ("unresolvable-advisory:underscore",
+         "security-triage: underscore reachable via an unmaintained dependency",
+         Stage.TRIAGE, 105, "working", 40),
+        ("stale-suppression:deck-gl",
+         "deps(frontend): coordinated @deck.gl / @luma.gl bump across workspaces",
+         Stage.REMEDIATION, 106, "working", 380),
+        ("blocked-upstream:babel-8",
+         "build(frontend): Babel 8 blocked by an unmaintained plugin",
+         Stage.TRIAGE, 107, "working", 95),
+    ]):
+        finding(key, title, "stale-suppression", "medium", "remediate",
+                issue, age_hours=2)
+        session(f"sess-live-{n}", key, stage, issue, detail=detail)
+        store.conn.execute(
+            "UPDATE sessions SET first_seen=? WHERE session_id=?",
+            (now - started, f"sess-live-{n}"))
+        store.conn.commit()
+
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--format", choices=("text", "html", "json"), default="text")
     ap.add_argument("--out")
+    ap.add_argument("--db", help="write the seeded store here and stop, so the "
+                                 "live dashboard can serve it")
     args = ap.parse_args()
+
+    if args.db:
+        target = pathlib.Path(args.db)
+        target.unlink(missing_ok=True)
+        with Store(target) as store:
+            seed(store)
+            counts = store.counts()
+        print(f"seeded {target} — {counts['findings']} findings, "
+              f"{counts['sessions']} sessions")
+        print(f"\n  DB_PATH={target} remediation-agent serve --no-collect\n")
+        return 0
 
     with tempfile.TemporaryDirectory() as tmp:
         with Store(pathlib.Path(tmp) / "preview.db") as store:

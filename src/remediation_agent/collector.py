@@ -67,6 +67,9 @@ class Collector:
         self.dispatcher = dispatcher
         self.terminate_finished = terminate_finished
         self._terminated: set[str] = set()
+        # Sessions whose context we have already looked up, so an in-flight
+        # session is not re-read on every 15-second tick.
+        self._context: dict[str, tuple[str | None, int | None]] = {}
         # Findings are needed to build a remediation prompt when triage promotes
         # one. Without them the collector can still observe, just not advance.
         self.findings = findings or {}
@@ -87,6 +90,7 @@ class Collector:
                 continue
 
             result.seen += 1
+            self._resolve_context(record)
             self._backfill(record)
             for transition in self.store.record_session(record):
                 result.transitions.append((record.session_id, transition))
@@ -106,6 +110,31 @@ class Collector:
             self._teardown(record, result)
 
         return result
+
+    # --------------------------------------------------------------- context
+
+    def _resolve_context(self, record: SessionRecord) -> None:
+        """Fill in which finding an in-flight session belongs to.
+
+        Automation-started sessions carry static tags and only report their own
+        context when they finish, so until then the dashboard cannot say which
+        issue is being worked on. The opening prompt already contains it —
+        Devin appends the triggering event payload, which includes the issue
+        body and its finding-key marker.
+
+        Cached per session: once known it does not change, and this runs on
+        every tick.
+        """
+        if record.finding_key and record.issue_number:
+            return
+
+        if record.session_id not in self._context:
+            self._context[record.session_id] = self.devin.session_context(
+                record.session_id)
+
+        key, number = self._context[record.session_id]
+        record.finding_key = record.finding_key or key
+        record.issue_number = record.issue_number or number
 
     # -------------------------------------------------------------- backfill
 

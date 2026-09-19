@@ -266,12 +266,19 @@ def _active_panel(report: Report) -> str:
         elapsed = _duration(report.generated_at - s_["started"])
         doing = STAGE_WORDS.get(s_["stage"] or "", "In progress")
         working = s_["detail"] == "working"
+        # The issue comes first: it is the work. The transcript is how you go
+        # and look at what the agent is doing about it.
+        issue = (
+            f'<a href="{esc(s_["issue_url"])}">#{s_["issue_number"]}</a> · '
+            if s_.get("issue_url") and s_.get("issue_number") else
+            (f'#{s_["issue_number"]} · ' if s_.get("issue_number") else "")
+        )
         rows.append(
             f'<li class="live-row">'
             f'<span class="pulse{"" if working else " idle"}"></span>'
             f'<div class="live-main">'
             f'<b>{esc(key)}</b>'
-            f'<div class="sub">{esc(doing)}'
+            f'<div class="sub">{issue}{esc(doing)}'
             f' · <a href="{esc(s_["url"])}">watch the agent</a></div></div>'
             f'<div class="live-meta">{elapsed}</div></li>'
         )

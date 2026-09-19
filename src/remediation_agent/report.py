@@ -194,6 +194,13 @@ def build(store: Store) -> Report:
 
     active_sessions: list[dict[str, Any]] = []
     abandoned_sessions: list[dict[str, Any]] = []
+
+    # Issue link per finding, so an in-flight row can point at the work itself
+    # rather than only at the agent transcript.
+    issue_by_finding = {
+        f["key"]: (f["issue_number"], f["issue_url"]) for f in store.findings()
+    }
+
     for session in store.sessions():
         if _is_abandoned(session):
             abandoned_sessions.append({
@@ -211,6 +218,8 @@ def build(store: Store) -> Report:
                 "waiting_since": session["last_seen"],
             })
         elif session["completed_at"] is None:
+            number, issue_url = issue_by_finding.get(session["finding_key"],
+                                                     (None, None))
             active_sessions.append({
                 "session_id": session["session_id"],
                 "url": session["url"],
@@ -220,6 +229,8 @@ def build(store: Store) -> Report:
                 "detail": session["status_detail"],
                 "acus": float(session["acus"] or 0),
                 "started": session["first_seen"],
+                "issue_number": number or session["issue_number"],
+                "issue_url": issue_url,
             })
 
     counts = store.counts()
