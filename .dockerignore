@@ -8,5 +8,6 @@ work
 *.env
 __pycache__
 .pytest_cache
-docs
+docs/*
+!docs/evidence
 tests

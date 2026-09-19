@@ -448,6 +448,10 @@ def main(argv: list[str] | None = None) -> int:
         "report": (),
         "file": ("GITHUB_TOKEN",),
     }
+    # `serve --no-collect` only reads the store, so it needs nothing either.
+    # That is what lets a reviewer open a recorded run without an account.
+    if args.command == "serve" and getattr(args, "no_collect", False):
+        needs["serve"] = ()
     try:
         cfg = Config.from_env(
             dry_run=args.dry_run,

@@ -1,0 +1,28 @@
+──────────────────────────────────────────────────────────────────────────────
+ REMEDIATION PIPELINE
+ 2026-09-19 11:23
+──────────────────────────────────────────────────────────────────────────────
+
+  1 finding(s) detected · 1 resolved · 0 outstanding
+
+  OUTCOME MIX
+
+    decline_not_actionable       1  ████████████████████████████
+
+  COST
+
+    not yet reported by the API — Devin aggregates consumption
+    on a delay, so 0.00 here means 'unknown', not 'free'.
+
+  FINDINGS
+
+    unresolvable-advisory:xlsx
+      security-triage: xlsx advisories cannot be resolved by upgrade and wil
+      issue #1         status decline_not_actionable time-to-verdict 15m
+
+  HEURISTIC vs AGENT
+
+    the cheap rule matched the agent on 1/1
+    where they differ is where the judgement actually happened
+
+──────────────────────────────────────────────────────────────────────────────

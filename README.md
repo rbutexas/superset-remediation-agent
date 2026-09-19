@@ -73,6 +73,16 @@ Expect four findings, and a routing table explaining why each needs an agent's
 judgement rather than a rule. Nothing is created, nothing is spent, no token is
 read.
 
+And to see the dashboard with real results in it — a recorded run, replayed:
+
+```bash
+docker compose up replay             # http://localhost:8766
+```
+
+That reads `docs/evidence/run.db`, a committed snapshot of an actual run. Every
+row in it came from a real session; nothing is authored. The same data is in
+`run.json` and `run.txt` for anyone who would rather read it than run it.
+
 To check the individual claims those findings rest on — versions, advisory
 ranges, pull-request states across two repositories:
 

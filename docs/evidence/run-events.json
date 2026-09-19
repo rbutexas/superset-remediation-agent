@@ -1,0 +1,69 @@
+{
+  "label": "after the xlsx triage run",
+  "captured_at": 1789831433,
+  "counts": {
+    "findings": 1,
+    "issues_filed": 1,
+    "sessions": 1,
+    "sessions_complete": 1,
+    "total_acus": 0.0
+  },
+  "events": [
+    {
+      "id": 1,
+      "ts": 1789829306,
+      "kind": "finding.detected",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "security-triage: xlsx advisories cannot be resolved by upgrade and will recur on every scan"
+    },
+    {
+      "id": 2,
+      "ts": 1789829306,
+      "kind": "issue.filed",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "#1 https://github.com/rbutexas/superset/issues/1"
+    },
+    {
+      "id": 3,
+      "ts": 1789830217,
+      "kind": "session.transition",
+      "subject": "2946a59642314035b7b2a1b3b2e588e0",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 4,
+      "ts": 1789830219,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 5,
+      "ts": 1789830219,
+      "kind": "session.terminated",
+      "subject": "2946a59642314035b7b2a1b3b2e588e0",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 6,
+      "ts": 1789830393,
+      "kind": "session.transition",
+      "subject": "2946a59642314035b7b2a1b3b2e588e0",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 7,
+      "ts": 1789830395,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 8,
+      "ts": 1789830833,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    }
+  ]
+}

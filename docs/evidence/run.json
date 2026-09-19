@@ -1,0 +1,46 @@
+{
+  "generated_at": 1789831433,
+  "findings": [
+    {
+      "key": "unresolvable-advisory:xlsx",
+      "title": "security-triage: xlsx advisories cannot be resolved by upgrade and will recur on every scan",
+      "detector": "unresolvable-advisory",
+      "severity": "medium",
+      "issue_number": 1,
+      "issue_url": "https://github.com/rbutexas/superset/issues/1",
+      "scanner_hint": "decline_not_actionable",
+      "triage": "decline_not_actionable",
+      "outcome": null,
+      "acus": 0.0,
+      "prs": [],
+      "first_seen": 1789829306,
+      "verdict_at": 1789830217,
+      "stalled": false,
+      "abandoned": false,
+      "unverifiable": null,
+      "sessions": [
+        [
+          "triage",
+          "https://app.devin.ai/sessions/2946a59642314035b7b2a1b3b2e588e0",
+          "exit"
+        ]
+      ]
+    }
+  ],
+  "total_acus": 0.0,
+  "sessions": 1,
+  "sessions_complete": 1,
+  "stalled_sessions": [],
+  "acus_are_reliable": false,
+  "abandoned_sessions": [],
+  "active_sessions": [],
+  "outcome_mix": {
+    "decline_not_actionable": 1
+  },
+  "resolved_count": 1,
+  "pull_requests": [],
+  "heuristic_agreement": {
+    "agreed": 1,
+    "compared": 1
+  }
+}

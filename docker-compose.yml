@@ -31,6 +31,21 @@ services:
       - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro
     command: ["scan", "--repo-path", "/work/superset"]
 
+  # The dashboard, replaying a recorded run. No credentials.
+  #   docker compose up replay   -> http://localhost:8766
+  # Reads the committed snapshot in docs/evidence/, so a reviewer sees the real
+  # results rather than an empty board.
+  replay:
+    build: .
+    image: remediation-agent:local
+    environment:
+      DB_PATH: /app/docs/evidence/run.db
+    ports:
+      - "127.0.0.1:${REPLAY_PORT:-8766}:8765"
+    volumes:
+      - ./docs/evidence:/app/docs/evidence:ro
+    command: ["serve", "--host", "0.0.0.0", "--no-collect"]
+
   # The pipeline and the dashboard. Needs credentials.
   #   docker compose up agent          -> dashboard on http://localhost:8765
   #   docker compose run --rm agent status
