@@ -1,11 +1,11 @@
 {
-  "label": "xlsx triage, real run",
-  "captured_at": 1789831901,
+  "label": "full run: xlsx dismissed, simple-zstd fixed (PR #3), userEvent fixed (PR #5)",
+  "captured_at": 1789878309,
   "counts": {
-    "findings": 1,
-    "issues_filed": 1,
-    "sessions": 1,
-    "sessions_complete": 1,
+    "findings": 3,
+    "issues_filed": 3,
+    "sessions": 5,
+    "sessions_complete": 5,
     "total_acus": 0.0
   },
   "events": [
@@ -64,6 +64,223 @@
       "kind": "triage.applied",
       "subject": "unresolvable-advisory:xlsx",
       "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 9,
+      "ts": 1789832036,
+      "kind": "session.transition",
+      "subject": "9ed003d758d84973ae9d8608ee2b59ad",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 10,
+      "ts": 1789832236,
+      "kind": "finding.detected",
+      "subject": "unfinished-migration:simple-zstd",
+      "detail": "deps(frontend): simple-zstd is pinned pending a code change that was never made"
+    },
+    {
+      "id": 11,
+      "ts": 1789832236,
+      "kind": "issue.filed",
+      "subject": "unfinished-migration:simple-zstd",
+      "detail": "#2 https://github.com/rbutexas/superset/issues/2"
+    },
+    {
+      "id": 12,
+      "ts": 1789832236,
+      "kind": "session.transition",
+      "subject": "9ed003d758d84973ae9d8608ee2b59ad",
+      "detail": "triage decided: remediate"
+    },
+    {
+      "id": 13,
+      "ts": 1789832251,
+      "kind": "session.transition",
+      "subject": "9ed003d758d84973ae9d8608ee2b59ad",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 14,
+      "ts": 1789832253,
+      "kind": "triage.applied",
+      "subject": "unfinished-migration:simple-zstd",
+      "detail": "promoted"
+    },
+    {
+      "id": 15,
+      "ts": 1789832254,
+      "kind": "session.terminated",
+      "subject": "9ed003d758d84973ae9d8608ee2b59ad",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 16,
+      "ts": 1789832269,
+      "kind": "session.transition",
+      "subject": "b4db081b7353491886cbf62773982106",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 17,
+      "ts": 1789832269,
+      "kind": "session.transition",
+      "subject": "9ed003d758d84973ae9d8608ee2b59ad",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 18,
+      "ts": 1789832546,
+      "kind": "session.transition",
+      "subject": "b4db081b7353491886cbf62773982106",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 19,
+      "ts": 1789832546,
+      "kind": "session.transition",
+      "subject": "b4db081b7353491886cbf62773982106",
+      "detail": "remediation outcome: fixed"
+    },
+    {
+      "id": 20,
+      "ts": 1789832547,
+      "kind": "session.terminated",
+      "subject": "b4db081b7353491886cbf62773982106",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 21,
+      "ts": 1789832562,
+      "kind": "session.transition",
+      "subject": "b4db081b7353491886cbf62773982106",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 22,
+      "ts": 1789832747,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 23,
+      "ts": 1789832762,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 24,
+      "ts": 1789833987,
+      "kind": "session.transition",
+      "subject": "ef352815c71b42ec9ac47b64af8190c7",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 25,
+      "ts": 1789834142,
+      "kind": "finding.detected",
+      "subject": "unawaited-user-event",
+      "detail": "test(frontend): 205 un-awaited userEvent calls across 52 files, and the lint rule that catches them is disabled"
+    },
+    {
+      "id": 26,
+      "ts": 1789834142,
+      "kind": "issue.filed",
+      "subject": "unawaited-user-event",
+      "detail": "#4 https://github.com/rbutexas/superset/issues/4"
+    },
+    {
+      "id": 27,
+      "ts": 1789834142,
+      "kind": "session.transition",
+      "subject": "ef352815c71b42ec9ac47b64af8190c7",
+      "detail": "triage decided: remediate"
+    },
+    {
+      "id": 28,
+      "ts": 1789834157,
+      "kind": "session.transition",
+      "subject": "ef352815c71b42ec9ac47b64af8190c7",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 29,
+      "ts": 1789834159,
+      "kind": "triage.applied",
+      "subject": "unawaited-user-event",
+      "detail": "promoted"
+    },
+    {
+      "id": 30,
+      "ts": 1789834159,
+      "kind": "session.terminated",
+      "subject": "ef352815c71b42ec9ac47b64af8190c7",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 31,
+      "ts": 1789834175,
+      "kind": "session.transition",
+      "subject": "e823916fbcb24ad1aca7989bc33bc83c",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 32,
+      "ts": 1789834175,
+      "kind": "session.transition",
+      "subject": "ef352815c71b42ec9ac47b64af8190c7",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 33,
+      "ts": 1789834355,
+      "kind": "triage.applied",
+      "subject": "unawaited-user-event",
+      "detail": "promoted"
+    },
+    {
+      "id": 34,
+      "ts": 1789834357,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 35,
+      "ts": 1789834454,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "resolved:decline_not_actionable"
+    },
+    {
+      "id": 36,
+      "ts": 1789834720,
+      "kind": "session.transition",
+      "subject": "e823916fbcb24ad1aca7989bc33bc83c",
+      "detail": "remediation outcome: fixed"
+    },
+    {
+      "id": 37,
+      "ts": 1789835977,
+      "kind": "session.transition",
+      "subject": "e823916fbcb24ad1aca7989bc33bc83c",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 38,
+      "ts": 1789835977,
+      "kind": "session.terminated",
+      "subject": "e823916fbcb24ad1aca7989bc33bc83c",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 39,
+      "ts": 1789835993,
+      "kind": "session.transition",
+      "subject": "e823916fbcb24ad1aca7989bc33bc83c",
+      "detail": "running/waiting_for_user -> exit/None"
     }
   ]
 }

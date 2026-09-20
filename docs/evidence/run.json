@@ -1,5 +1,5 @@
 {
-  "generated_at": 1789831901,
+  "generated_at": 1789878309,
   "findings": [
     {
       "key": "unresolvable-advisory:xlsx",
@@ -25,22 +25,90 @@
           "exit"
         ]
       ]
+    },
+    {
+      "key": "unfinished-migration:simple-zstd",
+      "title": "deps(frontend): simple-zstd is pinned pending a code change that was never made",
+      "detector": "stale-suppression",
+      "severity": "medium",
+      "issue_number": 2,
+      "issue_url": "https://github.com/rbutexas/superset/issues/2",
+      "scanner_hint": "remediate",
+      "triage": "remediate",
+      "outcome": "fixed",
+      "acus": 0.0,
+      "prs": [
+        "https://github.com/rbutexas/superset/pull/3"
+      ],
+      "first_seen": 1789832236,
+      "verdict_at": 1789832546,
+      "stalled": false,
+      "abandoned": false,
+      "unverifiable": "Did not run the real `npm run dev-server` against a Flask backend serving content-encoding: zstd HTML (no backend in this environment); the proxy path was exercised only via the jest tests that wire getProxyConfig() into http-proxy-middleware with a real HTTP backend. GitHub CI was still running at time of report.",
+      "sessions": [
+        [
+          "triage",
+          "https://app.devin.ai/sessions/9ed003d758d84973ae9d8608ee2b59ad",
+          "exit"
+        ],
+        [
+          "remediation",
+          "https://app.devin.ai/sessions/b4db081b7353491886cbf62773982106",
+          "exit"
+        ]
+      ]
+    },
+    {
+      "key": "unawaited-user-event",
+      "title": "test(frontend): 205 un-awaited userEvent calls across 52 files, and the lint rule that catches them is disabled",
+      "detector": "unawaited-user-event",
+      "severity": "high",
+      "issue_number": 4,
+      "issue_url": "https://github.com/rbutexas/superset/issues/4",
+      "scanner_hint": "remediate",
+      "triage": "remediate",
+      "outcome": "fixed",
+      "acus": 0.0,
+      "prs": [
+        "https://github.com/rbutexas/superset/pull/5"
+      ],
+      "first_seen": 1789834142,
+      "verdict_at": 1789835977,
+      "stalled": false,
+      "abandoned": false,
+      "unverifiable": "The flakes described in the issue were not reproduced locally (all 15 suites passed on the base branch), so the fix is demonstrated by static inspection and passing tests rather than by observing a flake disappear. The await-async-events rule is not exercised by the main `npm run lint` CI job (oxlint lacks a testing-library plugin); it only runs via the ESLint minimal config used by the tech-debt lint-stats workflow (continue-on-error). Corrected files under packages/ and plugins/ are globally ignored by eslint.config.minimal.js so the per-file 'error' override does not cover them.",
+      "sessions": [
+        [
+          "triage",
+          "https://app.devin.ai/sessions/ef352815c71b42ec9ac47b64af8190c7",
+          "exit"
+        ],
+        [
+          "remediation",
+          "https://app.devin.ai/sessions/e823916fbcb24ad1aca7989bc33bc83c",
+          "exit"
+        ]
+      ]
     }
   ],
   "total_acus": 0.0,
-  "sessions": 1,
-  "sessions_complete": 1,
+  "sessions": 5,
+  "sessions_complete": 5,
   "stalled_sessions": [],
   "acus_are_reliable": false,
   "abandoned_sessions": [],
   "active_sessions": [],
   "outcome_mix": {
-    "decline_not_actionable": 1
+    "decline_not_actionable": 1,
+    "fixed": 2
   },
-  "resolved_count": 1,
-  "pull_requests": [],
+  "resolved_count": 3,
+  "pull_requests": [
+    "https://github.com/rbutexas/superset/pull/3",
+    "https://github.com/rbutexas/superset/pull/5"
+  ],
   "heuristic_agreement": {
-    "agreed": 1,
-    "compared": 1
+    "agreed": 3,
+    "compared": 3
   }
 }
