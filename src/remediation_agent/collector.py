@@ -89,6 +89,14 @@ class Collector:
                 result.errors.append(f"unreadable payload: {exc}")
                 continue
 
+            # Archiving is a human saying "this run is retired". Devin still
+            # returns archived sessions from GET /sessions, so honouring that is
+            # our job — and it has to happen before anything is recorded or
+            # acted on, or a superseded verdict gets re-applied to its issue.
+            if record.archived:
+                log.debug("skipping archived session %s", record.session_id[:12])
+                continue
+
             result.seen += 1
             self._resolve_context(record)
             self._backfill(record)
@@ -218,6 +226,13 @@ class Collector:
         if self.dispatcher is None:
             return
 
+        # Acting on a verdict posts a comment, applies labels and may close the
+        # issue — none of which is idempotent. The in-process set above is empty
+        # again after a restart, so the durable record is the one that counts.
+        if self.store.decision_applied(record.session_id):
+            self._promoted.add(record.session_id)
+            return
+
         finding = self.findings.get(record.finding_key)
         if finding is None:
             log.warning("triage for %s decided %s but that finding is not loaded; "
@@ -228,10 +243,17 @@ class Collector:
         # Do not re-act on a decision already applied in an earlier run. The
         # store is the memory here; the in-process set only avoids duplicate work
         # within a single run.
-        prior = self.store.latest_session(record.finding_key, Stage.REMEDIATION.value)
-        if prior and record.triage_decision.dispatches_work:
-            self._promoted.add(record.session_id)
-            return
+        #
+        # The stage checked is the one this verdict dispatches to, not
+        # REMEDIATION unconditionally: a `document_only` verdict whose
+        # documentation session already exists must not be promoted again, and
+        # it would not be found by looking for a remediation session.
+        dispatch_stage = record.triage_decision.dispatch_stage
+        if dispatch_stage is not None:
+            prior = self.store.latest_session(record.finding_key, dispatch_stage.value)
+            if prior:
+                self._promoted.add(record.session_id)
+                return
 
         try:
             outcome = self.dispatcher.act_on_triage(
@@ -244,6 +266,8 @@ class Collector:
             return
 
         self._promoted.add(record.session_id)
+        self.store.mark_decision_applied(
+            record.session_id, record.triage_decision.value, outcome.action)
         self.store.log("triage.applied", record.finding_key, outcome.action)
         result.promoted.append(f"{record.finding_key}: {outcome.action}")
         log.info("%s -> %s", record.finding_key, outcome.action)

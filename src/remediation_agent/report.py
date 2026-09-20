@@ -27,7 +27,7 @@ import json
 import sqlite3
 import time
 from collections import Counter
-from typing import Any
+from typing import Any, Callable
 
 from .models import RemediationOutcome, Stage, TriageDecision
 from .store import Store
@@ -79,8 +79,11 @@ class FindingRow:
         if self.outcome:
             return self.outcome
         if self.triage:
-            return self.triage if not TriageDecision(self.triage).dispatches_work \
-                else "remediating"
+            decision = TriageDecision(self.triage)
+            stage = decision.dispatch_stage
+            if stage is None:
+                return self.triage
+            return "documenting" if stage is Stage.DOCUMENTATION else "remediating"
         if self.issue_number:
             return "awaiting triage"
         return "detected"
@@ -144,15 +147,45 @@ class Report:
 
 # ---------------------------------------------------------------- building
 
+def _newest(sessions: list[sqlite3.Row],
+            match: Callable[[sqlite3.Row], bool]) -> sqlite3.Row | None:
+    """Last matching session in an oldest-first list, or None."""
+    return next((s for s in reversed(sessions) if match(s)), None)
+
+
+def _is_work_stage(raw: str | None) -> bool:
+    """Did this session produce a change, rather than a verdict?
+
+    Tolerant of a stage string the current code does not know: the store holds
+    whatever a past version wrote, and an unrecognised value must render as "not
+    a work session" rather than raise inside the dashboard.
+    """
+    if not raw:
+        return False
+    try:
+        return Stage(raw).is_work
+    except ValueError:
+        return False
+
+
 def build(store: Store) -> Report:
     rows: list[FindingRow] = []
     stalled_sessions: list[dict[str, Any]] = []
 
     for finding in store.findings():
         sessions = store.sessions_for(finding["key"])
-        triage = next((s for s in sessions if s["stage"] == Stage.TRIAGE.value), None)
-        remediation = next(
-            (s for s in sessions if s["stage"] == Stage.REMEDIATION.value), None)
+        # `sessions` is oldest-first, and these take the *last* match rather than
+        # the first. A finding can be triaged more than once — re-labelled after
+        # a policy change, or re-run because the first verdict was reached with a
+        # verdict the pipeline could not act on — and the board must show the
+        # verdict in force, not the first one ever reached.
+        #
+        # The work session is any stage that produces a change and a pull
+        # request, so a finding resolved by a documentation session reports its
+        # outcome the same way a remediated one does. Matching REMEDIATION alone
+        # made a documented finding render as though it had never left triage.
+        triage = _newest(sessions, lambda s: s["stage"] == Stage.TRIAGE.value)
+        remediation = _newest(sessions, lambda s: _is_work_stage(s["stage"]))
 
         acus = sum(float(s["acus"] or 0) for s in sessions)
         prs = [pr for s in sessions for pr in Store.prs(s)]

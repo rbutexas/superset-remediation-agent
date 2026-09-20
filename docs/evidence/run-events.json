@@ -1,70 +1,14 @@
 {
-  "label": "full run: xlsx dismissed, simple-zstd fixed (PR #3), userEvent fixed (PR #5)",
-  "captured_at": 1789878309,
+  "label": "full run incl. document_only: xlsx mitigated (PR #7), simple-zstd fixed (PR #3), userEvent fixed (PR #5)",
+  "captured_at": 1789932733,
   "counts": {
     "findings": 3,
     "issues_filed": 3,
-    "sessions": 5,
-    "sessions_complete": 5,
+    "sessions": 6,
+    "sessions_complete": 6,
     "total_acus": 0.0
   },
   "events": [
-    {
-      "id": 1,
-      "ts": 1789829306,
-      "kind": "finding.detected",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "security-triage: xlsx advisories cannot be resolved by upgrade and will recur on every scan"
-    },
-    {
-      "id": 2,
-      "ts": 1789829306,
-      "kind": "issue.filed",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "#1 https://github.com/rbutexas/superset/issues/1"
-    },
-    {
-      "id": 3,
-      "ts": 1789830217,
-      "kind": "session.transition",
-      "subject": "2946a59642314035b7b2a1b3b2e588e0",
-      "detail": "discovered (running)"
-    },
-    {
-      "id": 4,
-      "ts": 1789830219,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
-    {
-      "id": 5,
-      "ts": 1789830219,
-      "kind": "session.terminated",
-      "subject": "2946a59642314035b7b2a1b3b2e588e0",
-      "detail": "output recorded; session ended"
-    },
-    {
-      "id": 6,
-      "ts": 1789830393,
-      "kind": "session.transition",
-      "subject": "2946a59642314035b7b2a1b3b2e588e0",
-      "detail": "running/waiting_for_user -> exit/None"
-    },
-    {
-      "id": 7,
-      "ts": 1789830395,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
-    {
-      "id": 8,
-      "ts": 1789830833,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
     {
       "id": 9,
       "ts": 1789832036,
@@ -157,20 +101,6 @@
       "detail": "running/waiting_for_user -> exit/None"
     },
     {
-      "id": 22,
-      "ts": 1789832747,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
-    {
-      "id": 23,
-      "ts": 1789832762,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
-    {
       "id": 24,
       "ts": 1789833987,
       "kind": "session.transition",
@@ -241,20 +171,6 @@
       "detail": "promoted"
     },
     {
-      "id": 34,
-      "ts": 1789834357,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
-    {
-      "id": 35,
-      "ts": 1789834454,
-      "kind": "triage.applied",
-      "subject": "unresolvable-advisory:xlsx",
-      "detail": "resolved:decline_not_actionable"
-    },
-    {
       "id": 36,
       "ts": 1789834720,
       "kind": "session.transition",
@@ -280,6 +196,104 @@
       "ts": 1789835993,
       "kind": "session.transition",
       "subject": "e823916fbcb24ad1aca7989bc33bc83c",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 40,
+      "ts": 1789931188,
+      "kind": "finding.detected",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "security-triage: xlsx advisories cannot be resolved by upgrade and will recur on every scan"
+    },
+    {
+      "id": 41,
+      "ts": 1789931188,
+      "kind": "issue.filed",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "#1 https://github.com/rbutexas/superset/issues/1"
+    },
+    {
+      "id": 42,
+      "ts": 1789931188,
+      "kind": "session.transition",
+      "subject": "9e32a3cb413549a5b605c937f5909c6e",
+      "detail": "discovered (claimed)"
+    },
+    {
+      "id": 43,
+      "ts": 1789931233,
+      "kind": "session.transition",
+      "subject": "9e32a3cb413549a5b605c937f5909c6e",
+      "detail": "claimed/None -> running/working"
+    },
+    {
+      "id": 44,
+      "ts": 1789931298,
+      "kind": "session.transition",
+      "subject": "9e32a3cb413549a5b605c937f5909c6e",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 45,
+      "ts": 1789931298,
+      "kind": "session.transition",
+      "subject": "9e32a3cb413549a5b605c937f5909c6e",
+      "detail": "triage decided: document_only"
+    },
+    {
+      "id": 46,
+      "ts": 1789931361,
+      "kind": "session.terminated",
+      "subject": "9e32a3cb413549a5b605c937f5909c6e",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 47,
+      "ts": 1789931493,
+      "kind": "session.transition",
+      "subject": "9e32a3cb413549a5b605c937f5909c6e",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 48,
+      "ts": 1789931583,
+      "kind": "triage.applied",
+      "subject": "unresolvable-advisory:xlsx",
+      "detail": "promoted"
+    },
+    {
+      "id": 49,
+      "ts": 1789931639,
+      "kind": "session.transition",
+      "subject": "3f06f58558dc453089e365d0a4ad7edb",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 50,
+      "ts": 1789931885,
+      "kind": "session.transition",
+      "subject": "3f06f58558dc453089e365d0a4ad7edb",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 51,
+      "ts": 1789931885,
+      "kind": "session.transition",
+      "subject": "3f06f58558dc453089e365d0a4ad7edb",
+      "detail": "remediation outcome: mitigated"
+    },
+    {
+      "id": 52,
+      "ts": 1789931886,
+      "kind": "session.terminated",
+      "subject": "3f06f58558dc453089e365d0a4ad7edb",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 53,
+      "ts": 1789931902,
+      "kind": "session.transition",
+      "subject": "3f06f58558dc453089e365d0a4ad7edb",
       "detail": "running/waiting_for_user -> exit/None"
     }
   ]

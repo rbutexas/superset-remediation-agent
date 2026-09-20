@@ -45,11 +45,31 @@ false positive is worth as much as an hour saved landing a fix. Do not reach for
 
 6. Decide:
    - `remediate` — real, actionable, and the change is worth making now
-   - `decline_not_actionable` — no change is the correct engineering answer
+   - `document_only` — no code change is correct, **but the determination itself
+     belongs in the repository**: a scanner suppression carrying this rationale,
+     a comment beside an existing ignore rule naming what is being waited on, or
+     a dated re-check condition. Choose this over `decline_not_actionable`
+     whenever your conclusion would otherwise have to be rediscovered by the next
+     person to look. Use `recommended_prompt_additions` to say exactly which file
+     should change and what it should say.
+   - `decline_not_actionable` — no change is the correct engineering answer *and*
+     there is nothing worth recording in the tree either
    - `blocked_upstream` — cannot proceed until something external changes. Name
      the specific package, PR, issue or release. "The ecosystem" is not a blocker.
    - `escalate_to_human` — needs a judgement outside your remit. Say what a human
      must decide, and what you would recommend.
+
+### Choosing between `document_only` and `decline_not_actionable`
+
+Ask: *if this repository is scanned again next quarter by someone who has never
+seen my reasoning, does the finding come back?*
+
+If yes, and a suppression or a comment would stop that, the answer is
+`document_only`. A determination that lives only in a closed issue is a
+determination that will be made again from scratch.
+
+`decline_not_actionable` is right when the finding is genuinely transient, or
+when there is no file in the repository where the conclusion would belong.
 
 ## On security findings
 
@@ -59,7 +79,9 @@ is assumed to hold. It states that findings which cannot identify both should be
 filed as questions, not vulnerabilities.
 
 If you cannot name both, the correct decision is `decline_not_actionable`, with
-reasoning explaining that the finding does not meet the project's own bar.
+reasoning explaining that the finding does not meet the project's own bar — or
+`document_only`, if the scanner will keep raising it and a scoped suppression
+would stop that.
 
 ## Calibration
 
@@ -117,6 +139,72 @@ A change you cannot demonstrate is correct is not finished.
 Change only what the issue asks for. Do not fix unrelated problems you notice,
 do not reformat untouched files, and do not upgrade adjacent dependencies. If you
 find something else worth doing, put it in `follow_up_required`.
+"""
+
+
+DOCUMENTATION_TITLE = "Record a triage determination in the repository (Superset)"
+
+DOCUMENTATION_BODY = """\
+Triage concluded that this finding has no correct code fix, but that the
+determination itself belongs in the repository. Your job is to write it down
+where the next scan and the next engineer will both find it.
+
+## What you may change
+
+Exactly one kind of thing: **configuration and comments that record a decision.**
+
+- A scanner suppression or allowlist entry, with the rationale beside it.
+- A comment next to an existing ignore rule, naming what is being waited on.
+- A dated re-check condition, so the entry cannot outlive its reason silently.
+- A short note in a security or dependency policy document, if one exists.
+
+## What you must not change
+
+- Any dependency version, version range, or install source.
+- Any lock file.
+- Any source file, test, or build configuration that affects what is built or run.
+
+If the determination cannot be recorded without one of these, **stop** and report
+`abandoned_on_guardrail`. Do not improvise a code change to make the finding go
+away. That is the exact failure this stage exists to prevent.
+
+## The suppression must be bounded
+
+An unbounded suppression is worse than no suppression: it hides the real problem
+if the situation later changes. Every entry you write must state the condition
+under which it stops applying, in a form a tool can evaluate where the format
+allows one — a version floor, a date, or a named upstream release.
+
+Concretely: if a package is safe at or above a version, scope the suppression to
+that floor so it **stops applying if anyone downgrades.** Do not write an entry
+that silences the package unconditionally.
+
+## Write the reasoning where it will be read
+
+The rationale goes in the file you change, next to the entry — not only in the
+pull-request description. A pull request is read once; the file is read every
+time someone asks why the entry is there.
+
+Keep it to a few lines: what was concluded, the versions or facts it rests on,
+and what would invalidate it.
+
+## Verification
+
+There are no tests for a comment. Verify what can actually be verified:
+
+- The file still parses. Run the project's own linter or config check on it.
+- Run `pre-commit run` on the files you changed.
+- If the suppression is in a format a tool consumes, show the tool accepting it.
+
+State in `verification.unverifiable` that the suppression's *effect* on the
+scanner was not observed, unless you actually ran the scanner and saw it.
+
+## Outcome
+
+Report `mitigated` — a compensating change was made and the underlying advisory
+is unchanged. `fixed` would be wrong: nothing was fixed. Say so plainly.
+
+Open a pull request. Do not merge it. A human approves every silence.
 """
 
 
@@ -201,4 +289,69 @@ Remediate this finding on @{repo}.
 
 Report the outcome via structured output, including the exact verification
 commands you ran and anything you could not verify.
+"""
+
+
+def documentation_prompt(finding: Finding, issue_number: int | None, repo: str,
+                         triage_reasoning: str = "",
+                         extra: str = "") -> str:
+    """Prompt for the restricted stage: record the verdict, change nothing else.
+
+    Deliberately repeats the prohibition that the playbook already states. The
+    playbook is standing procedure and the prompt is the specific instance, and
+    the one instruction that must not be missed is the one that is only in one
+    of them.
+    """
+    guardrails = (
+        "\n".join(f"- {g}" for g in finding.guardrails)
+        if finding.guardrails else "- (none stated)"
+    )
+    triage_block = (
+        f"\n### The determination to record\n\n{triage_reasoning}\n"
+        if triage_reasoning else ""
+    )
+    extra_block = (
+        f"\n### What triage said should be written, and where\n\n{extra}\n"
+        if extra else ""
+    )
+    close = (
+        f"\n\nOpen a pull request against @{repo} that closes #{issue_number}. "
+        f"Do not merge it."
+        if issue_number else ""
+    )
+
+    return f"""\
+Record a triage determination in @{repo}. **Make no functional change.**
+
+Triage investigated this finding and concluded that no code fix is correct, but
+that the conclusion belongs in the repository rather than only in a closed issue.
+
+## {finding.title}
+
+{finding.summary}
+{triage_block}{extra_block}
+### You may change
+
+Scanner suppressions, allowlists, ignore-rule comments, and dated re-check
+conditions — with the rationale written beside the entry.
+
+### You must not change
+
+Dependency versions, version ranges, install sources, lock files, or any source,
+test or build file. If the determination cannot be recorded without one of these,
+report `abandoned_on_guardrail` and stop.
+
+### Also do not
+{guardrails}
+
+### The entry must be bounded
+
+Scope the suppression so it stops applying if the underlying facts change — a
+version floor, a date, or a named upstream release. An unconditional entry would
+hide the real problem if the position ever regresses, which is the outcome this
+whole finding is about.
+{close}
+
+Report `mitigated`, not `fixed` — nothing was fixed. Report the outcome via
+structured output, including what you could not verify.
 """

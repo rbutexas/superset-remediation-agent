@@ -1,31 +1,6 @@
 {
-  "generated_at": 1789878309,
+  "generated_at": 1789932733,
   "findings": [
-    {
-      "key": "unresolvable-advisory:xlsx",
-      "title": "security-triage: xlsx advisories cannot be resolved by upgrade and will recur on every scan",
-      "detector": "unresolvable-advisory",
-      "severity": "medium",
-      "issue_number": 1,
-      "issue_url": "https://github.com/rbutexas/superset/issues/1",
-      "scanner_hint": "decline_not_actionable",
-      "triage": "decline_not_actionable",
-      "outcome": null,
-      "acus": 0.0,
-      "prs": [],
-      "first_seen": 1789829306,
-      "verdict_at": 1789830217,
-      "stalled": false,
-      "abandoned": false,
-      "unverifiable": null,
-      "sessions": [
-        [
-          "triage",
-          "https://app.devin.ai/sessions/2946a59642314035b7b2a1b3b2e588e0",
-          "exit"
-        ]
-      ]
-    },
     {
       "key": "unfinished-migration:simple-zstd",
       "title": "deps(frontend): simple-zstd is pinned pending a code change that was never made",
@@ -89,26 +64,59 @@
           "exit"
         ]
       ]
+    },
+    {
+      "key": "unresolvable-advisory:xlsx",
+      "title": "security-triage: xlsx advisories cannot be resolved by upgrade and will recur on every scan",
+      "detector": "unresolvable-advisory",
+      "severity": "medium",
+      "issue_number": 1,
+      "issue_url": "https://github.com/rbutexas/superset/issues/1",
+      "scanner_hint": "decline_not_actionable",
+      "triage": "document_only",
+      "outcome": "mitigated",
+      "acus": 0.0,
+      "prs": [
+        "https://github.com/rbutexas/superset/pull/7"
+      ],
+      "first_seen": 1789931188,
+      "verdict_at": 1789931885,
+      "stalled": false,
+      "abandoned": false,
+      "unverifiable": "The suppression's effect on the scanner (remediation-agent / OSV-based) was not observed; that scanner does not consume dependabot.yml, so the finding may still surface there. Dependabot's acceptance of the `versions` constraint was validated only by YAML parsing and pre-commit (check-yaml, zizmor), not by a Dependabot run. PR CI was still running at time of report.",
+      "sessions": [
+        [
+          "triage",
+          "https://app.devin.ai/sessions/9e32a3cb413549a5b605c937f5909c6e",
+          "exit"
+        ],
+        [
+          "documentation",
+          "https://app.devin.ai/sessions/3f06f58558dc453089e365d0a4ad7edb",
+          "exit"
+        ]
+      ]
     }
   ],
   "total_acus": 0.0,
-  "sessions": 5,
-  "sessions_complete": 5,
+  "sessions": 6,
+  "sessions_complete": 6,
   "stalled_sessions": [],
   "acus_are_reliable": false,
   "abandoned_sessions": [],
   "active_sessions": [],
   "outcome_mix": {
-    "decline_not_actionable": 1,
-    "fixed": 2
+    "fixed": 2,
+    "mitigated": 1
   },
   "resolved_count": 3,
   "pull_requests": [
     "https://github.com/rbutexas/superset/pull/3",
-    "https://github.com/rbutexas/superset/pull/5"
+    "https://github.com/rbutexas/superset/pull/5",
+    "https://github.com/rbutexas/superset/pull/7"
   ],
   "heuristic_agreement": {
-    "agreed": 3,
+    "agreed": 2,
     "compared": 3
   }
 }

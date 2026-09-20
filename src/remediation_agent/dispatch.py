@@ -32,10 +32,13 @@ from .github import GitHubClient
 from .models import Finding, Stage, TriageDecision
 from .routing import DEFAULT_POLICY, Policy, Route, RoutingDecision, route, summarise
 from .playbooks import (
+    DOCUMENTATION_BODY,
+    DOCUMENTATION_TITLE,
     REMEDIATION_BODY,
     REMEDIATION_TITLE,
     TRIAGE_BODY,
     TRIAGE_TITLE,
+    documentation_prompt,
     remediation_prompt,
     triage_prompt,
 )
@@ -46,6 +49,8 @@ log = logging.getLogger(__name__)
 TRIGGER_LABELS = {
     "agent:triage": ("8a63d8", "TRIGGER: dispatch a Devin triage session"),
     "agent:remediate": ("6f42c1", "TRIGGER: dispatch a Devin remediation session"),
+    "agent:document": ("0e8a16", "TRIGGER: dispatch a Devin documentation session "
+                                 "(records a determination; changes no code)"),
 }
 
 DESCRIPTIVE_LABELS = {
@@ -65,6 +70,7 @@ DESCRIPTIVE_LABELS = {
 class Provisioned:
     triage_playbook_id: str | None
     remediation_playbook_id: str | None
+    documentation_playbook_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -110,9 +116,9 @@ class Dispatcher:
     def provision(self) -> Provisioned:
         """Create or update the playbooks and labels. Safe to re-run."""
         if self.cfg.dry_run:
-            log.info("[dry-run] would upsert 2 playbooks and %d labels",
+            log.info("[dry-run] would upsert 3 playbooks and %d labels",
                      len(TRIGGER_LABELS) + len(DESCRIPTIVE_LABELS))
-            return Provisioned(None, None)
+            return Provisioned(None, None, None)
 
         created = self.github.ensure_labels({**DESCRIPTIVE_LABELS, **TRIGGER_LABELS})
         if created:
@@ -122,6 +128,13 @@ class Dispatcher:
             TRIAGE_TITLE, TRIAGE_BODY, output_schema=TRIAGE_SCHEMA)
         remediation = self.devin.upsert_playbook(
             REMEDIATION_TITLE, REMEDIATION_BODY, output_schema=REMEDIATION_SCHEMA)
+        # Shares the remediation schema: a documentation session reports the same
+        # shape — an outcome, a summary, and what it verified. What differs is the
+        # permission boundary, and that is carried by the playbook and the label,
+        # not by the output contract.
+        documentation = self.devin.upsert_playbook(
+            DOCUMENTATION_TITLE, DOCUMENTATION_BODY,
+            output_schema=REMEDIATION_SCHEMA)
 
         # Standing repo conventions, applied to every session automatically.
         self.devin.upsert_knowledge(
@@ -143,6 +156,8 @@ class Dispatcher:
         return Provisioned(
             triage_playbook_id=triage.get("playbook_id") or triage.get("id"),
             remediation_playbook_id=remediation.get("playbook_id") or remediation.get("id"),
+            documentation_playbook_id=(documentation.get("playbook_id")
+                                       or documentation.get("id")),
         )
 
     # ---------------------------------------------------------- stage 1
@@ -214,23 +229,30 @@ class Dispatcher:
                       decision: TriageDecision, output: dict[str, Any]) -> DispatchResult:
         """Apply Devin's triage decision.
 
-        `remediate` promotes the issue by adding the remediation trigger label.
-        Every other decision resolves the finding and is recorded as a comment,
-        because a determination that nobody can read is not a deliverable.
+        A verdict that dispatches work promotes the issue by adding that stage's
+        trigger label. Every other decision resolves the finding and is recorded
+        as a comment, because a determination that nobody can read is not a
+        deliverable.
+
+        The stage comes from `decision.dispatch_stage` rather than from an `if`
+        on REMEDIATE. That branch was the bug: `document_only` did not exist, so
+        a verdict of "no fix, but write this down" had nowhere to go and fell
+        through to the close-the-issue path with its recommendation unread.
         """
         reasoning = str(output.get("reasoning", "")).strip()
         confidence = output.get("confidence", "?")
 
-        if decision is TriageDecision.REMEDIATE:
+        stage = decision.dispatch_stage
+        if stage is not None:
             if self.cfg.dry_run:
-                return DispatchResult(finding.key, "would-promote",
+                return DispatchResult(finding.key, f"would-promote:{stage.value}",
                                       issue_number=issue_number)
             self.github.comment(issue_number, self._triage_comment(decision, output))
-            self.github.add_label(issue_number, Stage.REMEDIATION.trigger_label)
-            log.info("#%s promoted to remediation (confidence: %s)",
-                     issue_number, confidence)
+            self.github.add_label(issue_number, stage.trigger_label)
+            log.info("#%s promoted to %s (confidence: %s)",
+                     issue_number, stage.value, confidence)
             return DispatchResult(finding.key, "promoted", issue_number=issue_number,
-                                  detail=f"confidence={confidence}")
+                                  detail=f"stage={stage.value} confidence={confidence}")
 
         if self.cfg.dry_run:
             return DispatchResult(finding.key, f"would-resolve:{decision.value}",
@@ -260,29 +282,57 @@ class Dispatcher:
     def start_remediation(self, finding: Finding, issue_number: int,
                           playbook_id: str | None,
                           triage_output: dict[str, Any] | None = None) -> DispatchResult:
+        return self._start_work(Stage.REMEDIATION, finding, issue_number,
+                                playbook_id, triage_output)
+
+    def start_documentation(self, finding: Finding, issue_number: int,
+                            playbook_id: str | None,
+                            triage_output: dict[str, Any] | None = None
+                            ) -> DispatchResult:
+        """Start the restricted stage: record the verdict, change no code."""
+        return self._start_work(Stage.DOCUMENTATION, finding, issue_number,
+                                playbook_id, triage_output)
+
+    def _start_work(self, stage: Stage, finding: Finding, issue_number: int,
+                    playbook_id: str | None,
+                    triage_output: dict[str, Any] | None) -> DispatchResult:
+        """The manual path into a work stage, for the CLI and for rehearsals.
+
+        In normal operation nothing calls this: `act_on_triage` applies the
+        stage's label and Devin's own automation starts the session. Both paths
+        exist on purpose — the automation is the product, and this is how the
+        pipeline can be driven without one when an automation is disarmed.
+        """
         triage_output = triage_output or {}
-        prompt = remediation_prompt(
+        build_prompt = {
+            Stage.REMEDIATION: remediation_prompt,
+            Stage.DOCUMENTATION: documentation_prompt,
+        }[stage]
+
+        prompt = build_prompt(
             finding, issue_number, self.cfg.repo,
             triage_reasoning=str(triage_output.get("reasoning", "")),
             extra=str(triage_output.get("recommended_prompt_additions", "")),
         )
-        tags = self._tags(Stage.REMEDIATION, finding.key, issue_number)
+        tags = self._tags(stage, finding.key, issue_number)
+        title_prefix = "fix" if stage is Stage.REMEDIATION else "record"
 
         if self.cfg.dry_run:
-            log.info("[dry-run] REMEDIATION session for %s\n%s", finding.key, prompt)
-            return DispatchResult(finding.key, "would-remediate",
+            log.info("[dry-run] %s session for %s\n%s",
+                     stage.value.upper(), finding.key, prompt)
+            return DispatchResult(finding.key, f"would-{stage.value}",
                                   issue_number=issue_number,
                                   detail=f"tags={','.join(tags)}")
 
         session = self.devin.create_session(
             prompt,
-            title=f"fix: {finding.title[:72]}",
+            title=f"{title_prefix}: {finding.title[:70]}",
             repos=[self.cfg.repo],
             tags=tags,
             playbook_id=playbook_id,
             output_schema=REMEDIATION_SCHEMA,
         )
-        return DispatchResult(finding.key, "remediation-started",
+        return DispatchResult(finding.key, f"{stage.value}-started",
                               issue_number=issue_number,
                               session_id=session["session_id"],
                               session_url=session.get("url", ""))

@@ -681,3 +681,118 @@ since killing either destroys a pending decision or live work.
 
 **Where.** `devin.py::create_session`, `terminate_session`,
 `collector.py::_teardown`, `cli.py::cmd_cleanup`
+
+---
+
+## ★ 32. A verdict of "no fix, but write it down" gets its own stage
+
+`TriageDecision` gained a fifth value, `document_only`, and `Stage` gained a
+third, `DOCUMENTATION`, with its own label (`agent:document`), its own playbook
+and its own automation. It promotes to a session that may write scanner
+suppressions, ignore-rule comments and dated re-check conditions — and nothing
+else.
+
+**Why.** The first version had four verdicts, and exactly one of them
+(`remediate`) could reach a second session. `act_on_triage` branched on
+`decision is TriageDecision.REMEDIATE`; everything else posted a comment and
+closed the issue.
+
+That produced a dead end on the very first finding it ran against. The xlsx
+triage was correct — no code change improves the position, and the obvious
+automated fix is a downgrade — and it ended with a recommendation in its own
+reasoning: *"record the determination and, if the scanner supports it, suppress
+these two IDs for `xlsx>=0.20.2`."* Nothing could act on that. The issue closed,
+the reasoning lived in a closed thread and an agent transcript, and **Superset's
+tree was unchanged**, so the next scan against a fresh checkout reproduced the
+finding exactly and the next engineer would start from zero.
+
+The system's whole claim is that it breaks the re-triage loop. It did not. It
+moved the memory somewhere the next person would not look.
+
+**Why a stage and not a flag.** The restriction has to be enforceable on the path
+that actually runs. A session started by a GitHub automation gets a fixed prompt
+and fixed tags — the automation cannot vary them per event — so the only thing
+that can distinguish a restricted session from an unrestricted one is which
+label fired it. A `document_only=True` flag passed locally would have left the
+automation-started path unrestricted.
+
+**Why not just escalate to a human.** A pull request already *is* human review,
+and a better one: it carries the diff, the evidence and the revert, and it lands
+in a queue the team already reads. An escalation is a second backlog. The human
+stays exactly where they should be — approving a silence — because the stage
+opens a PR and never merges one.
+
+**The suppression must be bounded.** Both the playbook and the prompt require the
+entry to state what makes it stop applying. An unconditional ignore would hide
+the real vulnerability if anyone ever switched the install source to the
+registry, which is the precise hazard the finding is about.
+
+**What it produced.** Devin chose the repository's existing convention over the
+one suggested to it — a `.github/dependabot.yml` ignore entry rather than a new
+`audit-ci` file — bounded it as `versions: ["<= 0.20.3"]` so it lapses the moment
+a newer release exists, and added a re-check date of 2027-09-20. The entry sits
+directly beneath the `simple-zstd` one, which names no owner and no date. It also
+reported honestly that it had **not** observed the suppression take effect,
+because Dependabot is not the scanner that raised the finding.
+
+**Cost.** A fifth verdict is a fifth thing a triage session can get wrong, and the
+new one grants the power to silence a scanner. That is why it is capped at a
+quarter of the remediation ACU limit, why it may not touch a lock file, and why
+it cannot merge. It also makes `decline_not_actionable` rarer and more
+meaningful, which is the point: a dismissal should mean *there is nothing to
+record*, not *there was nowhere to put it*.
+
+**Where.** `models.py::TriageDecision.dispatch_stage`, `Stage.DOCUMENTATION`,
+`playbooks.py::DOCUMENTATION_BODY`, `automations.py::documentation_automation_body`,
+`dispatch.py::act_on_triage`, `tests/test_dispatch.py`
+
+---
+
+## 33. A verdict is applied once, and the record of that outlives the process
+
+`applied_decisions` is a table. The collector consults it before acting on any
+triage verdict.
+
+**Why.** Acting on a verdict posts a comment, applies labels and may close an
+issue. None of that is idempotent. The guard was an in-process set, which is
+empty again after every restart — so a completed triage session was re-applied
+on the next poll, every time.
+
+Found by reading the issue, not the code: **issue #1 had seven identical
+determination comments**, one per collector restart. Nothing failed, nothing
+logged an error, and the dashboard looked correct throughout, because the store
+deduplicates on session id while GitHub does not deduplicate comments.
+
+**Cost.** One more table, and a verdict genuinely worth re-applying now needs its
+row cleared first. That is the right default — re-applying is the rare case, and
+it should be deliberate.
+
+**Where.** `store.py::decision_applied`, `mark_decision_applied`,
+`collector.py::_advance`
+
+---
+
+## 34. An archived session is retired from the board
+
+`Collector.tick` skips any session Devin reports as `is_archived`, before it is
+recorded or acted on.
+
+**Why.** Archiving is a person saying "this run is superseded". Devin keeps
+returning archived sessions from `GET /sessions` — verified — so honouring that
+is our job or not at all.
+
+Without it there was no way to retire a run short of deleting data. When the
+xlsx finding was re-triaged under decision 32, its original `decline` verdict was
+still on record; the board would have rendered both, and worse, the collector
+would have re-applied the stale verdict to a live issue.
+
+Two things had to change together: this, and picking the **latest** session per
+stage in `report.build` rather than the first. That one was a plain bug — a
+finding triaged twice showed its oldest verdict — and it was invisible until
+something was re-run.
+
+**Cost.** History can be hidden from the board by an action taken outside this
+tool. Acceptable: nothing is deleted, un-archiving restores it, and the
+alternative is a board that cannot be corrected.
+
+**Where.** `collector.py::tick`, `devin.py::to_record`, `report.py::_newest`

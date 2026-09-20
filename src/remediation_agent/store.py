@@ -70,6 +70,20 @@ CREATE TABLE IF NOT EXISTS events (
     detail   TEXT
 );
 
+-- One row per triage session whose verdict has been acted on.
+--
+-- Acting on a verdict is not idempotent: it posts a comment, applies labels and
+-- may close the issue. The collector used to guard this with an in-process set,
+-- which is empty again after every restart — so a completed triage session was
+-- re-applied on the next poll, and issue #1 collected the same determination
+-- comment twice before anyone noticed. The guard has to outlive the process.
+CREATE TABLE IF NOT EXISTS applied_decisions (
+    session_id  TEXT PRIMARY KEY,
+    decision    TEXT NOT NULL,
+    action      TEXT NOT NULL,
+    applied_at  INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS ix_sessions_finding ON sessions(finding_key);
 CREATE INDEX IF NOT EXISTS ix_sessions_stage   ON sessions(stage);
 CREATE INDEX IF NOT EXISTS ix_events_subject   ON events(subject);
@@ -152,6 +166,21 @@ class Store:
             c.execute(
                 "INSERT INTO events (ts, kind, subject, detail) VALUES (?,?,?,?)",
                 (now(), kind, subject, detail),
+            )
+
+    def decision_applied(self, session_id: str) -> bool:
+        """Has this triage session's verdict already been acted on?"""
+        return self.conn.execute(
+            "SELECT 1 FROM applied_decisions WHERE session_id = ?",
+            (session_id,)).fetchone() is not None
+
+    def mark_decision_applied(self, session_id: str, decision: str,
+                              action: str) -> None:
+        with self.tx() as c:
+            c.execute(
+                "INSERT OR IGNORE INTO applied_decisions "
+                "(session_id, decision, action, applied_at) VALUES (?,?,?,?)",
+                (session_id, decision, action, now()),
             )
 
     def events(self, subject: str | None = None) -> list[sqlite3.Row]:

@@ -337,4 +337,5 @@ def to_record(payload: dict[str, Any]) -> SessionRecord:
         pull_requests=prs,
         created_at=int(payload.get("created_at") or 0),
         updated_at=int(payload.get("updated_at") or 0),
+        archived=bool(payload.get("is_archived")),
     )

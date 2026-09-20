@@ -95,6 +95,7 @@ def cmd_provision(args, cfg: Config) -> int:
     provisioned = dispatcher.provision()
     print(f"triage playbook      : {provisioned.triage_playbook_id}")
     print(f"remediation playbook : {provisioned.remediation_playbook_id}")
+    print(f"documentation pb     : {provisioned.documentation_playbook_id}")
 
     if args.skip_automations:
         print("automations          : skipped")
@@ -103,7 +104,8 @@ def cmd_provision(args, cfg: Config) -> int:
     created = auto.ensure(devin, cfg, dry_run=cfg.dry_run,
                           enabled=not args.disabled,
                           triage_playbook=provisioned.triage_playbook_id,
-                          remediation_playbook=provisioned.remediation_playbook_id)
+                          remediation_playbook=provisioned.remediation_playbook_id,
+                          documentation_playbook=provisioned.documentation_playbook_id)
     state = "DISABLED" if args.disabled else "enabled"
     for name, aid in created.items():
         print(f"automation           : {name} -> {aid} [{state}]")

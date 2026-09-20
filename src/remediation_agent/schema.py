@@ -60,7 +60,13 @@ TRIAGE_SCHEMA: dict[str, Any] = {
             "description": (
                 "What this finding deserves. 'decline_not_actionable' is a valid "
                 "and valued outcome — it is not a failure. Choose it when no "
-                "change is the correct engineering answer, and say why."
+                "change is the correct engineering answer, and say why. "
+                "Choose 'document_only' instead when no code change is correct "
+                "but the determination itself belongs in the repository — a "
+                "scoped scanner suppression, a comment beside an ignore rule, a "
+                "dated re-check condition — because otherwise the next scan "
+                "reproduces the finding and your reasoning is lost. Name the "
+                "file and the wording in 'recommended_prompt_additions'."
             ),
         },
         "reasoning": {

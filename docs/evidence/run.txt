@@ -1,6 +1,6 @@
 ──────────────────────────────────────────────────────────────────────────────
  REMEDIATION PIPELINE
- 2026-09-20 00:25
+ 2026-09-20 15:32
 ──────────────────────────────────────────────────────────────────────────────
 
   3 finding(s) detected · 3 resolved · 0 outstanding
@@ -8,7 +8,7 @@
   OUTCOME MIX
 
     fixed                        2  ███████████████████·········
-    decline_not_actionable       1  █████████···················
+    mitigated                    1  █████████···················
 
   COST
 
@@ -31,16 +31,19 @@
 
     unresolvable-advisory:xlsx
       security-triage: xlsx advisories cannot be resolved by upgrade and wil
-      issue #1         status decline_not_actionable time-to-verdict 15m
+      issue #1         status mitigated              time-to-verdict 11m
+      PR  https://github.com/rbutexas/superset/pull/7
+      ADMITTED GAP: The suppression's effect on the scanner (remediation-agent / OSV-based) was not observed; that scanner does not consume 
 
   HEURISTIC vs AGENT
 
-    the cheap rule matched the agent on 3/3
+    the cheap rule matched the agent on 2/3
     where they differ is where the judgement actually happened
 
   ADMITTED GAPS — work the agent declined to claim as verified
 
     unfinished-migration:simple-zstd: Did not run the real `npm run dev-server` against a Flask backend serving content-encoding: zstd HTM
     unawaited-user-event: The flakes described in the issue were not reproduced locally (all 15 suites passed on the base bran
+    unresolvable-advisory:xlsx: The suppression's effect on the scanner (remediation-agent / OSV-based) was not observed; that scann
 
 ──────────────────────────────────────────────────────────────────────────────

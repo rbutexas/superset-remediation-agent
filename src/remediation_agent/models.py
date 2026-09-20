@@ -30,8 +30,27 @@ class TriageDecision(enum.StrEnum):
     REMEDIATE = "remediate"
     """Real, actionable, worth the change. Proceeds to a remediation session."""
 
+    DOCUMENT_ONLY = "document_only"
+    """No code fix exists or is wanted, but the determination itself belongs in
+    the repository. Proceeds to a documentation session, which may write
+    suppression entries, ignore-rule comments and dated re-check conditions —
+    and nothing else.
+
+    This verdict exists because `decline_not_actionable` used to absorb it, and
+    that was a dead end. The xlsx advisory was investigated correctly, declined
+    correctly, and then the reasoning lived only in a closed issue and an agent
+    transcript. Nothing in Superset's own tree changed, so the next scan against
+    a fresh checkout reproduced the finding exactly, and the next engineer
+    started from zero. A determination nobody can find is not a resolution.
+
+    Kept separate from REMEDIATE rather than folded into it, because the
+    capability being granted is different in kind: writing a suppression is the
+    power to silence a scanner. It always opens a pull request and never merges
+    one, so a person still approves every silence."""
+
     DECLINE_NOT_ACTIONABLE = "decline_not_actionable"
-    """Investigated; no action is the correct outcome. A resolution, not a failure."""
+    """Investigated; no action is the correct outcome, and there is nothing worth
+    recording in the tree either. A resolution, not a failure."""
 
     BLOCKED_UPSTREAM = "blocked_upstream"
     """Cannot proceed until a named external thing changes. Must name it."""
@@ -54,7 +73,20 @@ class TriageDecision(enum.StrEnum):
 
     @property
     def dispatches_work(self) -> bool:
-        return self is TriageDecision.REMEDIATE
+        return self.dispatch_stage is not None
+
+    @property
+    def dispatch_stage(self) -> "Stage | None":
+        """Which stage this verdict promotes to, if any.
+
+        A property rather than a branch at the call site: the collector, the
+        dispatcher and the report all need to know where a verdict goes, and
+        three copies of the same `if` is how they drift apart.
+        """
+        return {
+            TriageDecision.REMEDIATE: Stage.REMEDIATION,
+            TriageDecision.DOCUMENT_ONLY: Stage.DOCUMENTATION,
+        }.get(self)
 
 
 class RemediationOutcome(enum.StrEnum):
@@ -101,6 +133,21 @@ class Stage(enum.StrEnum):
 
     TRIAGE = "triage"
     REMEDIATION = "remediation"
+    DOCUMENTATION = "documentation"
+    """Writes the determination into the tree, and may not touch anything else.
+
+    A separate stage rather than a flag on REMEDIATION because the stage *is*
+    the permission boundary. A session started by a GitHub automation receives a
+    fixed prompt and fixed tags — the automation cannot vary them per event — so
+    the only thing that can tell a restricted session from an unrestricted one
+    is which label fired it. Encoding the restriction in a flag we pass locally
+    would leave the automation-started path unrestricted, which is the path that
+    actually runs."""
+
+    @property
+    def is_work(self) -> bool:
+        """Produces a change and a pull request, as opposed to a verdict."""
+        return self in (Stage.REMEDIATION, Stage.DOCUMENTATION)
 
     @property
     def trigger_label(self) -> str:
@@ -122,6 +169,7 @@ class Stage(enum.StrEnum):
 _TRIGGER_LABELS: dict[Stage, str] = {
     Stage.TRIAGE: "agent:triage",
     Stage.REMEDIATION: "agent:remediate",
+    Stage.DOCUMENTATION: "agent:document",
 }
 
 
@@ -239,6 +287,15 @@ class SessionRecord:
     created_at: int = 0
     updated_at: int = 0
 
+    archived: bool = False
+    """Retired from the board by a human, in Devin's own UI or API.
+
+    Archiving does not remove a session from `GET /sessions`, so the collector
+    has to honour it explicitly. It is the only way to retire a superseded run —
+    a finding re-triaged under a changed policy has two verdicts on record, and
+    without this the board keeps rendering both. Nothing is deleted: the session,
+    its output and its replay all survive, and un-archiving brings it back."""
+
     @property
     def answered(self) -> bool:
         """Produced structured output — the only reliable completion signal.
@@ -290,6 +347,8 @@ class SessionRecord:
 
     def to_row(self) -> dict[str, Any]:
         d = dataclasses.asdict(self)
+        # Not a column: an archived session is never written at all.
+        d.pop("archived", None)
         d["stage"] = self.stage.value if self.stage else None
         d["triage_decision"] = self.triage_decision.value if self.triage_decision else None
         d["remediation_outcome"] = (

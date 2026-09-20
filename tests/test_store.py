@@ -276,3 +276,28 @@ def test_a_read_only_store_refuses_writes(tmp_path):
         store.close()
     finally:
         os.chmod(tmp_path, 0o755)
+
+
+# ------------------------------------------------- acting on a verdict, once
+
+def test_a_verdict_is_only_applied_once(store):
+    """Applying a verdict posts a comment, labels and possibly closes an issue.
+    The collector's in-process guard is empty after a restart, so without a
+    durable record the same determination gets posted again on the next poll —
+    which is exactly what happened to the xlsx issue."""
+    assert not store.decision_applied("sess-1")
+
+    store.mark_decision_applied("sess-1", "decline_not_actionable",
+                                "resolved:decline_not_actionable")
+    assert store.decision_applied("sess-1")
+
+    # A second attempt must not raise and must not double-count.
+    store.mark_decision_applied("sess-1", "decline_not_actionable", "again")
+    rows = list(store.conn.execute(
+        "SELECT action FROM applied_decisions WHERE session_id='sess-1'"))
+    assert [r["action"] for r in rows] == ["resolved:decline_not_actionable"]
+
+
+def test_applied_decisions_are_tracked_per_session(store):
+    store.mark_decision_applied("sess-1", "remediate", "promoted")
+    assert not store.decision_applied("sess-2")

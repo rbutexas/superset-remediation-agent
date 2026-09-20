@@ -2,9 +2,16 @@
 
 Two automations, and one of them is the actual product.
 
-1. **Label-driven.** A `github:issues` trigger filtered to `agent:triage` and
-   `agent:remediate`. Applying the label starts a session. This is the
-   "event-driven" path: no polling on GitHub's side, no glue service.
+1. **Label-driven.** `github:issues` triggers filtered to `agent:triage`,
+   `agent:remediate` and `agent:document`. Applying the label starts a session.
+   This is the "event-driven" path: no polling on GitHub's side, no glue service.
+
+   One automation per label, not one automation matching several. An automation
+   carries exactly one prompt and one playbook, and the playbook is what carries
+   the output schema — so a shared automation could only attach one, and half
+   the sessions would return the wrong shape. It is also where the permission
+   boundary lives: `agent:document` starts a session that may not change code,
+   and that restriction is only enforceable because it has its own trigger.
 
 2. **Scheduled re-validation.** A `schedule:recurring` trigger that re-runs the
    suppression audit weekly. This one matters more than it looks. Blockers clear
@@ -38,6 +45,7 @@ log = logging.getLogger(__name__)
 
 TRIAGE_AUTOMATION = "superset-debt: triage on agent:triage"
 REMEDIATION_AUTOMATION = "superset-debt: remediate on agent:remediate"
+DOCUMENTATION_AUTOMATION = "superset-debt: document on agent:document"
 SCHEDULE_AUTOMATION = "superset-debt: weekly suppression re-validation"
 
 # Weekdays 09:00 UTC. Evaluated in UTC by Devin — not the caller's timezone.
@@ -199,6 +207,62 @@ def remediation_automation_body(cfg: Config, playbook_id: str | None = None, *,
     }
 
 
+def documentation_automation_body(cfg: Config, playbook_id: str | None = None, *,
+                                  enabled: bool = True) -> dict[str, Any]:
+    """Record a determination on `agent:document` — no functional change.
+
+    A third automation rather than a second label on the remediation one,
+    because an automation carries exactly one prompt and one playbook. Sharing
+    the remediation automation would mean a session told to fix things being
+    handed a finding whose whole point is that it must not be fixed.
+
+    The `max_acu_limit` is deliberately a quarter of the remediation cap.
+    Writing a comment into a config file is not a task that should ever cost
+    what a code migration costs, and a session that blows through this cap has
+    misunderstood its job — which is the case worth stopping early and cheaply.
+    """
+    playbook_token = f" @playbook:{playbook_id}" if playbook_id else ""
+    return {
+        "name": DOCUMENTATION_AUTOMATION,
+        "run_as": {"type": "organization"},
+        "enabled": enabled,
+        "metadata": {"campaign": "superset-debt", "stage": "documentation",
+                     "managed_by": "remediation-agent"},
+        "triggers": [_label_trigger(Stage.DOCUMENTATION.trigger_label, cfg.repo)],
+        "actions": [{
+            "type": "start_session",
+            "prompt": (
+                f"Record a triage determination in @{cfg.repo}."
+                f"{playbook_token}\n\n"
+                "Triage concluded that this finding has no correct code fix, but "
+                "that the conclusion belongs in the repository rather than only "
+                "in a closed issue. Its reasoning is in the issue comments.\n\n"
+                "**Make no functional change.** You may write scanner "
+                "suppressions, allowlist entries, ignore-rule comments and dated "
+                "re-check conditions, with the rationale beside the entry. You "
+                "may not change any dependency version, version range, install "
+                "source, lock file, or any source, test or build file.\n\n"
+                "If the determination cannot be recorded without one of those, "
+                "report `abandoned_on_guardrail` and stop. Do not improvise a "
+                "code change to make the finding go away.\n\n"
+                "Scope the entry so it stops applying if the underlying facts "
+                "change — a version floor, a date, or a named upstream release. "
+                "An unconditional suppression hides the real problem if the "
+                "position ever regresses.\n\n"
+                "Report `mitigated`, not `fixed`. Open a pull request; do not "
+                "merge it. Your structured output must include the issue number "
+                "and the `finding-key` from the HTML comment at the bottom of "
+                "the issue body — that is how your answer is matched back to "
+                "the issue."
+            ),
+            "session": _session(cfg, tags=["stage:documentation"]),
+        }],
+        "concurrency": {"max_concurrent_runs": cfg.max_concurrent_sessions,
+                        "max_queue_depth": 25},
+        "limits": {"max_acu_limit": max(1, cfg.max_acu_per_session // 4)},
+    }
+
+
 def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE, *,
                              enabled: bool = True) -> dict[str, Any]:
     return {
@@ -245,7 +309,8 @@ def set_enabled(devin: DevinClient, enabled: bool) -> dict[str, str]:
     inspectable" apart from "this will now spend money when an issue is
     labelled".
     """
-    managed = {TRIAGE_AUTOMATION, REMEDIATION_AUTOMATION, SCHEDULE_AUTOMATION}
+    managed = {TRIAGE_AUTOMATION, REMEDIATION_AUTOMATION,
+               DOCUMENTATION_AUTOMATION, SCHEDULE_AUTOMATION}
     result: dict[str, str] = {}
     for a in devin.list_automations():
         name = a.get("name")
@@ -260,7 +325,8 @@ def set_enabled(devin: DevinClient, enabled: bool) -> dict[str, str]:
 
 def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False,
            enabled: bool = True, triage_playbook: str | None = None,
-           remediation_playbook: str | None = None) -> dict[str, str]:
+           remediation_playbook: str | None = None,
+           documentation_playbook: str | None = None) -> dict[str, str]:
     """Create both automations if absent. Returns name -> id (or a dry-run note).
 
     Deliberately does not update an automation that already exists. Silently
@@ -284,6 +350,7 @@ def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False,
     bodies = (
         triage_automation_body(cfg, triage_playbook, enabled=enabled),
         remediation_automation_body(cfg, remediation_playbook, enabled=enabled),
+        documentation_automation_body(cfg, documentation_playbook, enabled=enabled),
         schedule_automation_body(cfg, enabled=enabled),
     )
     for body in bodies:

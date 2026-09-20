@@ -151,9 +151,43 @@ def test_dismissals_resolve_a_finding():
     assert not TriageDecision.REMEDIATE.resolves_finding  # it dispatches instead
 
 
-def test_only_remediate_dispatches_work():
+def test_exactly_two_verdicts_dispatch_work():
     dispatching = [d for d in TriageDecision if d.dispatches_work]
-    assert dispatching == [TriageDecision.REMEDIATE]
+    assert dispatching == [TriageDecision.REMEDIATE, TriageDecision.DOCUMENT_ONLY]
+
+
+def test_every_dispatching_verdict_names_a_stage():
+    """`dispatches_work` is derived from `dispatch_stage`, so a new verdict that
+    forgets to name a stage silently stops dispatching rather than failing."""
+    for decision in TriageDecision:
+        assert decision.dispatches_work == (decision.dispatch_stage is not None)
+
+
+def test_document_only_dispatches_to_the_restricted_stage():
+    """The whole point: a verdict of "no fix, but write it down" must reach a
+    session, not close the issue with its recommendation unread."""
+    assert TriageDecision.DOCUMENT_ONLY.dispatch_stage is Stage.DOCUMENTATION
+    assert TriageDecision.REMEDIATE.dispatch_stage is Stage.REMEDIATION
+    assert TriageDecision.DECLINE_NOT_ACTIONABLE.dispatch_stage is None
+
+
+def test_document_only_is_not_a_resolution_on_its_own():
+    """It has dispatched work that has not happened yet. Counting it as resolved
+    at triage time would report the finding answered before anything was written."""
+    assert not TriageDecision.DOCUMENT_ONLY.resolves_finding
+
+
+def test_every_stage_has_a_distinct_trigger_label():
+    """Two stages sharing a label would mean one automation firing for both, and
+    the restricted stage is only restricted because it has its own trigger."""
+    labels = [s.trigger_label for s in Stage]
+    assert len(labels) == len(set(labels)) == len(list(Stage))
+
+
+def test_only_work_stages_produce_changes():
+    assert Stage.REMEDIATION.is_work
+    assert Stage.DOCUMENTATION.is_work
+    assert not Stage.TRIAGE.is_work
 
 
 def test_stopping_on_a_guardrail_is_a_success():
@@ -221,3 +255,16 @@ def test_legacy_url_key_still_works():
     payload = {**REAL_SHAPE,
                "pull_requests": [{"url": "https://github.com/o/r/pull/9"}]}
     assert to_record(payload).pull_requests == ("https://github.com/o/r/pull/9",)
+
+
+def test_an_archived_session_is_recognised():
+    """Devin keeps returning archived sessions from GET /sessions, so the
+    collector has to filter them itself. If this field stops being read, a
+    retired verdict silently comes back and is re-applied to its issue."""
+    assert not to_record(REAL_SHAPE).archived
+    assert to_record({**REAL_SHAPE, "is_archived": True}).archived
+
+
+def test_archived_is_not_persisted_as_a_column():
+    """It is a reason not to write the row, not a property of the row."""
+    assert "archived" not in to_record(REAL_SHAPE).to_row()

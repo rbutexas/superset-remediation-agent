@@ -43,6 +43,7 @@ OUTCOME_STYLE: dict[str, tuple[str, str]] = {
     "failed_verification":    ("critical", "Failed verification"),
     "escalate_to_human":      ("warning",  "Escalated"),
     "remediating":            ("muted",    "Remediating"),
+    "documenting":            ("muted",    "Recording the determination"),
     "awaiting triage":        ("muted",    "Awaiting triage"),
     "detected":               ("muted",    "Detected"),
 }
@@ -230,6 +231,7 @@ def _attention_panel(report: Report) -> str:
 STAGE_WORDS = {
     "triage": "Being assessed",
     "remediation": "Being fixed",
+    "documentation": "Being written down",
 }
 
 # Short forms for the table's Agent column — the transcript link, so the
@@ -237,6 +239,7 @@ STAGE_WORDS = {
 STAGE_SHORT = {
     "triage": "triage",
     "remediation": "fix",
+    "documentation": "record",
     "revalidation": "re-check",
 }
 
