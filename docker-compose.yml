@@ -6,6 +6,8 @@
 #
 #   checkout   nothing          clone the repository under audit
 #   scan       nothing          detect findings and print the routing table
+#   test       nothing          run the suite inside the image
+#   claims     nothing          re-derive every factual claim, live
 #   agent      credentials      the pipeline, and the live dashboard
 #
 # A reviewer with no Devin account can still run `checkout` and `scan` and see
@@ -30,6 +32,30 @@ services:
     volumes:
       - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro
     command: ["scan", "--repo-path", "/work/superset"]
+
+  # The test suite, inside the image. No credentials, no network.
+  #   docker compose run --rm test
+  test:
+    build: .
+    image: remediation-agent:local
+    # pyproject already sets `-q` and `filterwarnings = ["error"]`, so
+    # repeating them here only makes pytest doubly quiet and swallows the
+    # summary line — which reads as a run that never finished.
+    entrypoint: ["python", "-m", "pytest"]
+
+  # Re-derive every factual claim the issue set rests on, against live APIs.
+  #   docker compose run --rm claims
+  claims:
+    build: .
+    image: remediation-agent:local
+    # Five of the 42 assertions read pull-request and issue history across two
+    # repositories, which needs a token. Without one they skip rather than fail,
+    # and the run reports 37 passed / 2 skipped.
+    environment:
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - ${SUPERSET_CHECKOUT:-./work/superset}:/work/superset:ro
+    entrypoint: ["python", "tools/verify_claims.py", "--repo", "/work/superset"]
 
   # The dashboard, replaying a recorded run. No credentials.
   #   docker compose up replay   -> http://localhost:8766

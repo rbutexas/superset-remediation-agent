@@ -10,4 +10,4 @@ __pycache__
 .pytest_cache
 docs/*
 !docs/evidence
-tests
+# tests/ ships in the image so the suite runs without a local Python

@@ -15,8 +15,13 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY src/ ./src/
 COPY tools/ ./tools/
+# The suite ships in the image so a reviewer can run it without a local Python
+# or a network. Everything else here is containerised; tests were the one thing
+# that still needed both, which made "immediately reproducible" not quite true.
+COPY tests/ ./tests/
 
 RUN pip install --no-cache-dir -e . \
+ && pip install --no-cache-dir pytest \
  && useradd --create-home --uid 10001 agent \
  && mkdir -p /app/data /work \
  && chown -R agent:agent /app /work

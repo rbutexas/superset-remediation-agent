@@ -123,9 +123,14 @@ judgement rather than a rule. This reads the actual repository over the network
 **Step 4. Check the claims those findings rest on.**
 
 ```bash
-pip install pytest && python3 -m pytest        # 89 tests
-python3 tools/verify_claims.py --repo ./work/superset
+docker compose run --rm test                   # 89 tests; warnings fail the run
+docker compose run --rm claims                 # 37 assertions against live APIs
 ```
+
+Both run with no credentials. Five of the claim assertions read pull-request
+history across two repositories and need a GitHub token — they skip without
+one, so set `GITHUB_TOKEN` to get all 42. Natively instead, if you prefer:
+`pip install pytest && python3 -m pytest` and `python3 tools/verify_claims.py`.
 
 The second re-derives every factual statement in the issue set — versions,
 advisory ranges, pull-request states across two repositories — as 42 assertions
@@ -318,10 +323,9 @@ If a claim is not in that script and passing, it does not go in an issue.
 
 | | |
 |---|---|
-| [`docs/DECISIONS.md`](docs/DECISIONS.md) | 28 architectural decisions, each with its cost. Start at 18. |
+| [`docs/DECISIONS.md`](docs/DECISIONS.md) | 34 architectural decisions, each with its cost. Start at 18. |
 | [`docs/ISSUES.md`](docs/ISSUES.md) | The issue set, with evidence |
 | [`docs/DECK.md`](docs/DECK.md) | Presentation outline and speaker notes |
-| [`docs/STATE.md`](docs/STATE.md) | Verified API and repository facts |
 
 ## Tests
 
