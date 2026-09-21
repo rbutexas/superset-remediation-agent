@@ -34,6 +34,8 @@ from .routing import DEFAULT_POLICY, Policy, Route, RoutingDecision, route, summ
 from .playbooks import (
     DOCUMENTATION_BODY,
     DOCUMENTATION_TITLE,
+    REVALIDATION_BODY,
+    REVALIDATION_TITLE,
     REMEDIATION_BODY,
     REMEDIATION_TITLE,
     TRIAGE_BODY,
@@ -42,7 +44,7 @@ from .playbooks import (
     remediation_prompt,
     triage_prompt,
 )
-from .schema import REMEDIATION_SCHEMA, TRIAGE_SCHEMA
+from .schema import REMEDIATION_SCHEMA, REVALIDATION_SCHEMA, TRIAGE_SCHEMA
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +73,7 @@ class Provisioned:
     triage_playbook_id: str | None
     remediation_playbook_id: str | None
     documentation_playbook_id: str | None = None
+    revalidation_playbook_id: str | None = None
 
 
 @dataclass(slots=True)
@@ -116,9 +119,9 @@ class Dispatcher:
     def provision(self) -> Provisioned:
         """Create or update the playbooks and labels. Safe to re-run."""
         if self.cfg.dry_run:
-            log.info("[dry-run] would upsert 3 playbooks and %d labels",
+            log.info("[dry-run] would upsert 4 playbooks and %d labels",
                      len(TRIGGER_LABELS) + len(DESCRIPTIVE_LABELS))
-            return Provisioned(None, None, None)
+            return Provisioned(None, None, None, None)
 
         created = self.github.ensure_labels({**DESCRIPTIVE_LABELS, **TRIGGER_LABELS})
         if created:
@@ -135,6 +138,12 @@ class Dispatcher:
         documentation = self.devin.upsert_playbook(
             DOCUMENTATION_TITLE, DOCUMENTATION_BODY,
             output_schema=REMEDIATION_SCHEMA)
+        # The weekly scan reports rather than changes anything, so it needs a
+        # shape of its own. Without one it ran, did the work, and emitted
+        # nothing the collector could read — a session that answered into a void.
+        revalidation = self.devin.upsert_playbook(
+            REVALIDATION_TITLE, REVALIDATION_BODY,
+            output_schema=REVALIDATION_SCHEMA)
 
         # Standing repo conventions, applied to every session automatically.
         self.devin.upsert_knowledge(
@@ -158,6 +167,8 @@ class Dispatcher:
             remediation_playbook_id=remediation.get("playbook_id") or remediation.get("id"),
             documentation_playbook_id=(documentation.get("playbook_id")
                                        or documentation.get("id")),
+            revalidation_playbook_id=(revalidation.get("playbook_id")
+                                      or revalidation.get("id")),
         )
 
     # ---------------------------------------------------------- stage 1

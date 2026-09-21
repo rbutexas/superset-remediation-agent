@@ -343,8 +343,8 @@ def verify_xlsx(pkg: dict) -> None:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", default="/tmp/ss",
-                    help="path to a checkout of apache/superset (default: /tmp/ss)")
+    ap.add_argument("--repo", default="./work/superset",
+                    help="checkout of apache/superset (default: ./work/superset, where `docker compose run --rm checkout` puts it)")
     ap.add_argument("--json", action="store_true", help="emit raw JSON results")
     args = ap.parse_args()
 

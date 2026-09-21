@@ -96,6 +96,7 @@ def cmd_provision(args, cfg: Config) -> int:
     print(f"triage playbook      : {provisioned.triage_playbook_id}")
     print(f"remediation playbook : {provisioned.remediation_playbook_id}")
     print(f"documentation pb     : {provisioned.documentation_playbook_id}")
+    print(f"revalidation pb      : {provisioned.revalidation_playbook_id}")
 
     if args.skip_automations:
         print("automations          : skipped")
@@ -105,7 +106,8 @@ def cmd_provision(args, cfg: Config) -> int:
                           enabled=not args.disabled,
                           triage_playbook=provisioned.triage_playbook_id,
                           remediation_playbook=provisioned.remediation_playbook_id,
-                          documentation_playbook=provisioned.documentation_playbook_id)
+                          documentation_playbook=provisioned.documentation_playbook_id,
+                          revalidation_playbook=provisioned.revalidation_playbook_id)
     state = "DISABLED" if args.disabled else "enabled"
     for name, aid in created.items():
         print(f"automation           : {name} -> {aid} [{state}]")
@@ -368,7 +370,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub = p.add_subparsers(dest="command", required=True)
 
     def repo_arg(sp):
-        sp.add_argument("--repo-path", default="/tmp/ss",
+        sp.add_argument("--repo-path", default="./work/superset",
                         help="local checkout of the target repository")
         sp.add_argument("--allow-direct", action="store_true",
                         help="permit unambiguous findings to skip triage")

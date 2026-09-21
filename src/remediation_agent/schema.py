@@ -252,3 +252,77 @@ def validate_minimal(payload: dict[str, Any], schema: dict[str, Any]) -> list[st
             problems += [f"{key}.{p}" for p in validate_minimal(value, spec)]
 
     return problems
+
+
+REVALIDATION_SCHEMA: dict[str, Any] = {
+    "$schema": "http://json-schema.org/draft-07/schema#",
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["suppressions_reviewed", "cleared", "still_blocked"],
+    "properties": {
+        "suppressions_reviewed": {
+            "type": "integer",
+            "description": (
+                "How many ignore entries you actually read. Reporting nothing "
+                "because you reviewed nothing is a different result from "
+                "reporting nothing because everything is still blocked."
+            ),
+        },
+        "cleared": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["dependency", "stated_condition", "evidence"],
+                "properties": {
+                    "dependency": {"type": "string"},
+                    "stated_condition": {
+                        "type": "string",
+                        "description": "The comment's own words, quoted.",
+                    },
+                    "evidence": {
+                        "type": "string",
+                        "description": (
+                            "What specifically resolved it — a merged PR, a "
+                            "published release, a closed issue, with dates. "
+                            "Say whether a closure was a real fix or a revert."
+                        ),
+                    },
+                    "cleared_on": {
+                        "type": "string",
+                        "description": "ISO date the last condition cleared, if known.",
+                    },
+                },
+            },
+        },
+        "still_blocked": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["dependency", "blocker"],
+                "properties": {
+                    "dependency": {"type": "string"},
+                    "blocker": {
+                        "type": "string",
+                        "description": "What is still outstanding. Name it specifically.",
+                    },
+                },
+            },
+            "description": (
+                "Entries you checked and found genuinely still blocked. This is "
+                "the useful negative result — it is how a reader knows the scan "
+                "covered them rather than skipped them."
+            ),
+        },
+        "unreadable": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": (
+                "Entries whose stated condition you could not evaluate — a "
+                "wildcard, a dead link, or a condition about code rather than "
+                "an external release. Say why."
+            ),
+        },
+    },
+}

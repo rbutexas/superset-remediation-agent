@@ -355,3 +355,63 @@ whole finding is about.
 Report `mitigated`, not `fixed` — nothing was fixed. Report the outcome via
 structured output, including what you could not verify.
 """
+
+
+REVALIDATION_TITLE = "Re-validate Dependabot suppressions (Superset)"
+
+REVALIDATION_BODY = """\
+Every ignore entry in `.github/dependabot.yml` has a human-written comment beside
+it saying why it exists and, usually, what would make it removable. Nothing in
+any toolchain ever re-reads those comments, so a suppression outlives its cause
+silently. Your job is to read them and say which ones are no longer true.
+
+**This is a reporting pass. Open no pull requests and change no files.**
+
+## Procedure
+
+For every `dependency-name` entry:
+
+1. Read the comment above it. That is the stated condition, in the author's own
+   words — quote it rather than paraphrasing.
+2. Follow every link it contains, **including into other repositories.** A merged
+   pull request is not the same as a released one: check whether the fix actually
+   shipped in a version, and whether this project is on that version.
+3. Decide whether the condition has genuinely cleared.
+
+## The trap to avoid
+
+**A closed issue is not proof of a fix.** An issue describing a failure is often
+closed by *reverting* the change that caused it — which means the condition reads
+as satisfied while the underlying problem is untouched. Find out what closed it
+before you count it. If a closure was a revert, say so explicitly.
+
+Equally: a condition that names something about *this* repository's own code
+cannot be resolved from a link. Report those as unreadable rather than guessing.
+
+## Calibration
+
+A suppression that exists usually exists for a reason. Evidence that its stated
+condition has cleared means the upgrade is worth **retrying**, not that it is
+safe. Say that in your evidence rather than implying the work is done.
+
+Report the entries still blocked as well as the cleared ones. A reader needs to
+know the scan covered them rather than skipped them.
+"""
+
+
+def revalidation_prompt(repo: str) -> str:
+    return f"""\
+Re-validate the Dependabot suppressions in @{repo}.
+
+Read `.github/dependabot.yml`. For every ignore entry, read the comment beside
+it, follow any links it contains — including into other repositories — and
+determine whether the stated condition still holds.
+
+Do not open pull requests and do not change any files. This is a reporting pass.
+
+A closed issue is not proof of a fix: an issue is often closed by reverting the
+change that caused it. Find out what closed it, and say so if it was a revert.
+
+Report every suppression whose condition has cleared, every one still blocked,
+and every one you could not evaluate, via structured output.
+"""

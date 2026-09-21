@@ -11,8 +11,8 @@ Deliberately does not touch GitHub. A session needs a prompt, not an issue, so
 the demo issues stay unfiled.
 
 Usage:
-    python3 tools/calibrate.py --repo-path /tmp/ss --finding xlsx [--cap 15]
-    python3 tools/calibrate.py --repo-path /tmp/ss --finding xlsx --dry-run
+    python3 tools/calibrate.py --repo-path ./work/superset --finding xlsx [--cap 15]
+    python3 tools/calibrate.py --repo-path ./work/superset --finding xlsx --dry-run
 """
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ RULE = "=" * 78
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo-path", default="/tmp/ss")
+    ap.add_argument("--repo-path", default="./work/superset")
     ap.add_argument("--finding", required=True,
                     help="substring matching the finding key, e.g. 'xlsx'")
     ap.add_argument("--cap", type=int, default=15, help="hard ACU limit")

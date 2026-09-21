@@ -1,11 +1,11 @@
 {
-  "label": "full run incl. document_only: xlsx mitigated (PR #7), simple-zstd fixed (PR #3), userEvent fixed (PR #5)",
-  "captured_at": 1789932733,
+  "label": "full run, 4 findings: 3 fixed (PRs #3 #5 #9), 1 mitigated (PR #7)",
+  "captured_at": 1790015170,
   "counts": {
-    "findings": 3,
-    "issues_filed": 3,
-    "sessions": 6,
-    "sessions_complete": 6,
+    "findings": 4,
+    "issues_filed": 4,
+    "sessions": 9,
+    "sessions_complete": 9,
     "total_acus": 0.0
   },
   "events": [
@@ -294,6 +294,111 @@
       "ts": 1789931902,
       "kind": "session.transition",
       "subject": "3f06f58558dc453089e365d0a4ad7edb",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 54,
+      "ts": 1789999642,
+      "kind": "session.transition",
+      "subject": "79029af1edf04e9b8dcab6845e5f68e2",
+      "detail": "discovered (suspended)"
+    },
+    {
+      "id": 55,
+      "ts": 1790010257,
+      "kind": "finding.detected",
+      "subject": "stale-suppression:react-checkbox-tree",
+      "detail": "deps(frontend): the react-checkbox-tree suppression's stated conditions are now met \u2014 retry the upgrade"
+    },
+    {
+      "id": 56,
+      "ts": 1790010257,
+      "kind": "issue.filed",
+      "subject": "stale-suppression:react-checkbox-tree",
+      "detail": "#8 https://github.com/rbutexas/superset/issues/8"
+    },
+    {
+      "id": 57,
+      "ts": 1790010257,
+      "kind": "session.transition",
+      "subject": "6d6458e1a0fe4ae2b16a4ba3627807a8",
+      "detail": "discovered (new)"
+    },
+    {
+      "id": 58,
+      "ts": 1790010273,
+      "kind": "session.transition",
+      "subject": "6d6458e1a0fe4ae2b16a4ba3627807a8",
+      "detail": "new/None -> running/working"
+    },
+    {
+      "id": 59,
+      "ts": 1790010413,
+      "kind": "session.transition",
+      "subject": "6d6458e1a0fe4ae2b16a4ba3627807a8",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 60,
+      "ts": 1790010413,
+      "kind": "session.transition",
+      "subject": "6d6458e1a0fe4ae2b16a4ba3627807a8",
+      "detail": "triage decided: remediate"
+    },
+    {
+      "id": 61,
+      "ts": 1790010415,
+      "kind": "triage.applied",
+      "subject": "stale-suppression:react-checkbox-tree",
+      "detail": "promoted"
+    },
+    {
+      "id": 62,
+      "ts": 1790010416,
+      "kind": "session.terminated",
+      "subject": "6d6458e1a0fe4ae2b16a4ba3627807a8",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 63,
+      "ts": 1790010431,
+      "kind": "session.transition",
+      "subject": "6d6458e1a0fe4ae2b16a4ba3627807a8",
+      "detail": "running/waiting_for_user -> exit/None"
+    },
+    {
+      "id": 64,
+      "ts": 1790012755,
+      "kind": "session.transition",
+      "subject": "f00591b9638e45208094ee864e007d52",
+      "detail": "discovered (running)"
+    },
+    {
+      "id": 65,
+      "ts": 1790013730,
+      "kind": "session.transition",
+      "subject": "f00591b9638e45208094ee864e007d52",
+      "detail": "remediation outcome: fixed"
+    },
+    {
+      "id": 66,
+      "ts": 1790014974,
+      "kind": "session.transition",
+      "subject": "f00591b9638e45208094ee864e007d52",
+      "detail": "running/working -> running/waiting_for_user"
+    },
+    {
+      "id": 67,
+      "ts": 1790014974,
+      "kind": "session.terminated",
+      "subject": "f00591b9638e45208094ee864e007d52",
+      "detail": "output recorded; session ended"
+    },
+    {
+      "id": 68,
+      "ts": 1790014991,
+      "kind": "session.transition",
+      "subject": "f00591b9638e45208094ee864e007d52",
       "detail": "running/waiting_for_user -> exit/None"
     }
   ]

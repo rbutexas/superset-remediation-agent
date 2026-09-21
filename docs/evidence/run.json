@@ -1,5 +1,5 @@
 {
-  "generated_at": 1789932733,
+  "generated_at": 1790015170,
   "findings": [
     {
       "key": "unfinished-migration:simple-zstd",
@@ -96,27 +96,68 @@
           "exit"
         ]
       ]
+    },
+    {
+      "key": "stale-suppression:react-checkbox-tree",
+      "title": "deps(frontend): the react-checkbox-tree suppression's stated conditions are now met \u2014 retry the upgrade",
+      "detector": "stale-suppression",
+      "severity": "medium",
+      "issue_number": 8,
+      "issue_url": "https://github.com/rbutexas/superset/issues/8",
+      "scanner_hint": "remediate",
+      "triage": "remediate",
+      "outcome": "fixed",
+      "acus": 0.0,
+      "prs": [
+        "https://github.com/rbutexas/superset/pull/9"
+      ],
+      "first_seen": 1790010257,
+      "verdict_at": 1790014974,
+      "stalled": false,
+      "abandoned": false,
+      "unverifiable": "Did not run the full Superset app (webpack dev-server + Flask backend) and open a dashboard's filter-scope UI in a browser locally; the runtime failure was demonstrated/refuted via an equivalent standalone webpack+react-refresh harness in headless Chrome plus inspection of the real `build-dev` DashboardContainer chunk. CI Cypress/Playwright E2E suites passed on the PR, but those run production bundles, not the react-refresh dev build. Visual appearance of the filter-scope tree after the .rct-title/.rct-options CSS renames was not checked in a browser.",
+      "sessions": [
+        [
+          "triage",
+          "https://app.devin.ai/sessions/6d6458e1a0fe4ae2b16a4ba3627807a8",
+          "exit"
+        ],
+        [
+          "remediation",
+          "https://app.devin.ai/sessions/f00591b9638e45208094ee864e007d52",
+          "exit"
+        ]
+      ]
     }
   ],
   "total_acus": 0.0,
-  "sessions": 6,
-  "sessions_complete": 6,
+  "sessions": 9,
+  "sessions_complete": 9,
   "stalled_sessions": [],
   "acus_are_reliable": false,
-  "abandoned_sessions": [],
+  "abandoned_sessions": [
+    {
+      "session_id": "79029af1edf04e9b8dcab6845e5f68e2",
+      "url": "https://app.devin.ai/sessions/79029af1edf04e9b8dcab6845e5f68e2",
+      "finding": null,
+      "detail": "inactivity",
+      "ended": 1789999642
+    }
+  ],
   "active_sessions": [],
   "outcome_mix": {
-    "fixed": 2,
+    "fixed": 3,
     "mitigated": 1
   },
-  "resolved_count": 3,
+  "resolved_count": 4,
   "pull_requests": [
     "https://github.com/rbutexas/superset/pull/3",
     "https://github.com/rbutexas/superset/pull/5",
-    "https://github.com/rbutexas/superset/pull/7"
+    "https://github.com/rbutexas/superset/pull/7",
+    "https://github.com/rbutexas/superset/pull/9"
   ],
   "heuristic_agreement": {
-    "agreed": 2,
-    "compared": 3
+    "agreed": 3,
+    "compared": 4
   }
 }

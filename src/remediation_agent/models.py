@@ -144,10 +144,23 @@ class Stage(enum.StrEnum):
     would leave the automation-started path unrestricted, which is the path that
     actually runs."""
 
+    REVALIDATION = "revalidation"
+    """Re-reads every suppression comment and reports the ones whose stated
+    condition has cleared. Started by a schedule, not by a label.
+
+    Declared here because the collector reads the stage from a session tag, and
+    an unrecognised value degrades to `None` — which meant the weekly run was
+    recorded as a session belonging to nothing, and re-warned on every poll."""
+
     @property
     def is_work(self) -> bool:
         """Produces a change and a pull request, as opposed to a verdict."""
         return self in (Stage.REMEDIATION, Stage.DOCUMENTATION)
+
+    @property
+    def is_label_triggered(self) -> bool:
+        """Started by applying a GitHub label, rather than by a schedule."""
+        return self in _TRIGGER_LABELS
 
     @property
     def trigger_label(self) -> str:
@@ -163,7 +176,13 @@ class Stage(enum.StrEnum):
         The label is a user-facing name and the enum value is an internal one.
         They are allowed to differ, but not by accident.
         """
-        return _TRIGGER_LABELS[self]
+        try:
+            return _TRIGGER_LABELS[self]
+        except KeyError:
+            raise ValueError(
+                f"{self.value} is not started by a label — check "
+                f"`is_label_triggered` before asking for one"
+            ) from None
 
 
 _TRIGGER_LABELS: dict[Stage, str] = {

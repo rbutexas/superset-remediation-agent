@@ -61,7 +61,7 @@ The first of those was found by reading a comment in a config file, following it
   dashboard   outcome mix · cost · time-to-verdict · stalls · CI verification
 ```
 
-**The scanner does not decide what a finding deserves — Devin does.** The scanner emits facts, evidence and open questions with no disposition attached. A triage session reads those *and the repository* and returns one of four verdicts.
+**The scanner does not decide what a finding deserves — Devin does.** The scanner emits facts, evidence and open questions with no disposition attached. A triage session reads those *and the repository* and returns one of five verdicts.
 
 That split is the whole design. If the verdict came from an `if` statement in this codebase, the argument above would answer itself.
 
@@ -123,7 +123,7 @@ judgement rather than a rule. This reads the actual repository over the network
 **Step 4. Check the claims those findings rest on.**
 
 ```bash
-pip install pytest && python3 -m pytest        # 63 tests
+pip install pytest && python3 -m pytest        # 89 tests
 python3 tools/verify_claims.py --repo ./work/superset
 ```
 
@@ -186,7 +186,7 @@ absent.
 docker compose run --rm agent provision --disabled
 ```
 
-Creates two playbooks, the labels, and three automations — **inert**. You can
+Creates four playbooks, the labels, and four automations — **inert**. You can
 inspect them in the Devin UI. Nothing fires.
 
 **Step 7. File the issues.** Free, because nothing is listening yet.
@@ -307,7 +307,7 @@ The argument for that is in the repository's own history: PR #39261 passed CI an
 Separately, every factual claim used in the issue set is an executable assertion:
 
 ```bash
-python3 tools/verify_claims.py --repo /tmp/ss    # 42 checks against repo, npm, OSV, GitHub
+python3 tools/verify_claims.py --repo ./work/superset   # 42 checks against repo, npm, OSV, GitHub
 ```
 
 If a claim is not in that script and passing, it does not go in an issue.
@@ -326,7 +326,7 @@ If a claim is not in that script and passing, it does not go in an issue.
 ## Tests
 
 ```bash
-.venv/bin/python -m pytest        # 44 tests, no warnings
+.venv/bin/python -m pytest        # 89 tests, no warnings
 ```
 
 `filterwarnings = ["error"]` is set, so a warning fails the suite.

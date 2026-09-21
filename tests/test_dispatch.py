@@ -139,6 +139,8 @@ def test_every_trigger_label_is_registered_for_creation():
     dispatcher applies but never registers ends up uncoloured, undocumented, and
     indistinguishable from a typo."""
     for stage in Stage:
+        if not stage.is_label_triggered:
+            continue
         assert stage.trigger_label in TRIGGER_LABELS
 
 

@@ -263,8 +263,10 @@ def documentation_automation_body(cfg: Config, playbook_id: str | None = None, *
     }
 
 
-def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE, *,
+def schedule_automation_body(cfg: Config, playbook_id: str | None = None, *,
+                             rrule: str = WEEKLY_RRULE,
                              enabled: bool = True) -> dict[str, Any]:
+    playbook_token = f" @playbook:{playbook_id}" if playbook_id else ""
     return {
         "name": SCHEDULE_AUTOMATION,
         "run_as": {"type": "organization"},
@@ -281,7 +283,8 @@ def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE, *,
         "actions": [{
             "type": "start_session",
             "prompt": (
-                f"Re-validate the Dependabot suppressions in @{cfg.repo}.\n\n"
+                f"Re-validate the Dependabot suppressions in @{cfg.repo}."
+                f"{playbook_token}\n\n"
                 "`.github/dependabot.yml` suppresses dependency updates. Beside "
                 "each entry a human wrote the condition under which it should "
                 "be removed. Nothing re-reads those comments, so a suppression "
@@ -294,7 +297,13 @@ def schedule_automation_body(cfg: Config, rrule: str = WEEKLY_RRULE, *,
                 "is a reporting pass.\n\n"
                 "A suppression that exists usually exists for a reason. "
                 "Evidence that its condition has cleared means the upgrade is "
-                "worth retrying, not that it is safe."
+                "worth retrying, not that it is safe.\n\n"
+                "A closed issue is not proof of a fix — an issue is often "
+                "closed by reverting the change that caused it. Find out what "
+                "closed it, and say so if it was a revert.\n\n"
+                "Report via structured output: the suppressions whose stated "
+                "condition has cleared, those still blocked, and those you "
+                "could not evaluate."
             ),
             "session": _session(cfg, tags=["stage:revalidation"]),
         }],
@@ -326,7 +335,8 @@ def set_enabled(devin: DevinClient, enabled: bool) -> dict[str, str]:
 def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False,
            enabled: bool = True, triage_playbook: str | None = None,
            remediation_playbook: str | None = None,
-           documentation_playbook: str | None = None) -> dict[str, str]:
+           documentation_playbook: str | None = None,
+           revalidation_playbook: str | None = None) -> dict[str, str]:
     """Create both automations if absent. Returns name -> id (or a dry-run note).
 
     Deliberately does not update an automation that already exists. Silently
@@ -351,7 +361,7 @@ def ensure(devin: DevinClient, cfg: Config, *, dry_run: bool = False,
         triage_automation_body(cfg, triage_playbook, enabled=enabled),
         remediation_automation_body(cfg, remediation_playbook, enabled=enabled),
         documentation_automation_body(cfg, documentation_playbook, enabled=enabled),
-        schedule_automation_body(cfg, enabled=enabled),
+        schedule_automation_body(cfg, revalidation_playbook, enabled=enabled),
     )
     for body in bodies:
         name = body["name"]

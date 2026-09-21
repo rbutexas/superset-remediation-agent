@@ -11,6 +11,8 @@ tests pin that, using a payload shaped like the one that caused the bug.
 
 from __future__ import annotations
 
+import pytest
+
 from remediation_agent.devin import to_record
 from remediation_agent.models import (
     RemediationOutcome,
@@ -177,11 +179,25 @@ def test_document_only_is_not_a_resolution_on_its_own():
     assert not TriageDecision.DOCUMENT_ONLY.resolves_finding
 
 
-def test_every_stage_has_a_distinct_trigger_label():
+def test_every_label_triggered_stage_has_a_distinct_label():
     """Two stages sharing a label would mean one automation firing for both, and
     the restricted stage is only restricted because it has its own trigger."""
-    labels = [s.trigger_label for s in Stage]
-    assert len(labels) == len(set(labels)) == len(list(Stage))
+    triggered = [s for s in Stage if s.is_label_triggered]
+    labels = [s.trigger_label for s in triggered]
+    assert len(labels) == len(set(labels)) == len(triggered)
+
+
+def test_the_scheduled_stage_has_no_label_and_says_so():
+    """Revalidation is started by a schedule. Asking it for a label is a bug in
+    the caller, and it should say which property to check instead of raising a
+    bare KeyError from a private dict."""
+    assert not Stage.REVALIDATION.is_label_triggered
+    with pytest.raises(ValueError, match="is_label_triggered"):
+        Stage.REVALIDATION.trigger_label
+
+
+def test_the_scheduled_stage_produces_no_pull_request():
+    assert not Stage.REVALIDATION.is_work
 
 
 def test_only_work_stages_produce_changes():
@@ -232,6 +248,8 @@ def test_trigger_labels_match_the_labels_actually_registered():
     from remediation_agent.dispatch import TRIGGER_LABELS
 
     for stage in Stage:
+        if not stage.is_label_triggered:
+            continue
         assert stage.trigger_label in TRIGGER_LABELS, (
             f"{stage} listens for {stage.trigger_label!r}, which is not a label "
             f"this tool creates: {sorted(TRIGGER_LABELS)}"
